@@ -1,0 +1,85 @@
+
+version: "3.8"
+
+services:
+
+  # ── Zookeeper ──────────────────────────────────────────────
+  # Kafka needs Zookeeper to manage which broker is the leader
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    ports:
+      - "2181:2181"
+
+  # ── Kafka Broker ───────────────────────────────────────────
+  # The message queue where producers send data and consumers read from
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  # ── Kafka UI ───────────────────────────────────────────────
+  # A browser UI to see Kafka topics and messages visually
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    depends_on:
+      - kafka
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+
+  # ── PostgreSQL ─────────────────────────────────────────────
+  # Gold layer data warehouse for aggregated fraud scores
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: fraud_user
+      POSTGRES_PASSWORD: fraud_pass
+      POSTGRES_DB: fraud_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # ── MLflow ─────────────────────────────────────────────────
+  # Tracks ML experiments, logs metrics, stores model versions
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.9.0
+    ports:
+      - "5000:5000"
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri postgresql://fraud_user:fraud_pass@postgres:5432/fraud_db
+      --default-artifact-root /mlflow/artifacts
+    depends_on:
+      - postgres
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts
+
+  # ── Grafana ────────────────────────────────────────────────
+  # Dashboard tool — reads from PostgreSQL and shows charts
+  grafana:
+    image: grafana/grafana:10.2.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+volumes:
+  postgres_data:
+  mlflow_artifacts:
+  grafana_data:

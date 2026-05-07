@@ -1,0 +1,23 @@
+{
+  "name": "Fraud Detection Pipeline",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "17"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": false,
+      "dockerDashComposeVersion": "v2"
+    }
+  },
+  "postCreateCommand": "pip install -r requirements.txt",
+  "forwardPorts": [8080, 5000, 9090, 3000, 9092, 8090],
+  "portsAttributes": {
+    "8080": {"label": "Airflow UI"},
+    "5000": {"label": "MLflow UI"},
+    "9090": {"label": "Prometheus"},
+    "3000": {"label": "Grafana"},
+    "9092": {"label": "Kafka"},
+    "8090": {"label": "Kafka UI"}
+  }
+}
