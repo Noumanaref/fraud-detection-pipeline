@@ -1,10 +1,5 @@
-
-version: "3.8"
-
 services:
-
   # ── Zookeeper ──────────────────────────────────────────────
-  # Kafka needs Zookeeper to manage which broker is the leader
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     environment:
@@ -13,21 +8,24 @@ services:
       - "2181:2181"
 
   # ── Kafka Broker ───────────────────────────────────────────
-  # The message queue where producers send data and consumers read from
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     depends_on:
       - zookeeper
     ports:
       - "9092:9092"
+      - "9093:9093"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      # TWO listeners: one for internal Docker containers, one for external
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
   # ── Kafka UI ───────────────────────────────────────────────
-  # A browser UI to see Kafka topics and messages visually
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     depends_on:
@@ -39,7 +37,6 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
 
   # ── PostgreSQL ─────────────────────────────────────────────
-  # Gold layer data warehouse for aggregated fraud scores
   postgres:
     image: postgres:15
     environment:
@@ -52,7 +49,6 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   # ── MLflow ─────────────────────────────────────────────────
-  # Tracks ML experiments, logs metrics, stores model versions
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.9.0
     ports:
@@ -68,8 +64,58 @@ services:
     volumes:
       - mlflow_artifacts:/mlflow/artifacts
 
+  # ── Spark Master ───────────────────────────────────────────
+  # The brain of the Spark cluster — assigns tasks to workers
+  # Port 8080 is Spark Master UI, 7077 is where workers connect
+  spark-master:
+    image: apache/spark:3.5.0
+    environment:
+      - SPARK_NO_DAEMONIZE=true
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    volumes:
+      - ./:/workspace
+
+  spark-worker:
+    image: apache/spark:3.5.0
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    environment:
+      - SPARK_WORKER_MEMORY=2g
+      - SPARK_WORKER_CORES=2
+    depends_on:
+      - spark-master
+    volumes:
+      - ./:/workspace
+
+  # ── Apache Airflow ─────────────────────────────────────────
+  # Orchestrates the full pipeline on a schedule
+  # We use LocalExecutor which runs tasks as local processes
+  # Good enough for development — no need for Celery/Redis complexity
+  airflow:
+    image: apache/airflow:2.8.0
+    depends_on:
+      - postgres
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://fraud_user:fraud_pass@postgres:5432/fraud_db
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'  # don't load tutorial DAGs
+      AIRFLOW__WEBSERVER__SECRET_KEY: 'fraud_secret_key'
+    ports:
+      - "8081:8080"   # Airflow Web UI
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags   # your DAG files
+      - airflow_logs:/opt/airflow/logs
+    command: >
+      bash -c "airflow db init &&
+               airflow users create --username admin --password admin
+               --firstname Admin --lastname User
+               --role Admin --email admin@example.com &&
+               airflow webserver & airflow scheduler"
+
   # ── Grafana ────────────────────────────────────────────────
-  # Dashboard tool — reads from PostgreSQL and shows charts
   grafana:
     image: grafana/grafana:10.2.0
     ports:
@@ -83,3 +129,4 @@ volumes:
   postgres_data:
   mlflow_artifacts:
   grafana_data:
+  airflow_logs:
