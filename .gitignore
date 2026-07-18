@@ -31,3 +31,5 @@ logs/
 
 # OS
 .DS_Store
+aws/
+awscliv2.zip
