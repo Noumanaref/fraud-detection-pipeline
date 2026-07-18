@@ -33,3 +33,4 @@ logs/
 .DS_Store
 aws/
 awscliv2.zip
+.vscode/
