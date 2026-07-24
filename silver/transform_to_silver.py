@@ -1,6 +1,8 @@
 import os
 from pyspark.sql import SparkSession
 from delta import configure_spark_with_delta_pip
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType
+from pyspark.sql.functions import from_json, col, expr, to_timestamp
 
 
 # Configuration && partition prunning
@@ -55,3 +57,61 @@ print(f"Row count: {legacy_df.count()}")
 
 
 
+# Step B : lets parse JSON and standardize schema
+print("\n--- Step B: Unpacking JSON & Standardizing Schemas ---")
+
+# Define schemas of both sources for from_json
+mockingbird_schema = StructType(
+    [StructField("transaction_id", StringType(), True),
+    StructField("timestamp", StringType(), True),
+    StructField("user_id", StringType(), True),
+    StructField("amount", DoubleType(), True),
+    StructField("merchant", StringType(), True),
+    StructField("location", StringType(), True),
+    StructField("transaction_type", StringType(), True),
+    StructField("isFraud", IntegerType(), True)
+    ])
+
+
+paysim_schema = StructType([
+    StructField("step", IntegerType(), True),
+    StructField("transaction_type", StringType(), True),
+    StructField("amount", DoubleType(), True),
+    StructField("nameOrig", StringType(), True),
+    StructField("oldbalanceOrg", DoubleType(), True),
+    StructField("newbalanceOrig", DoubleType(), True),
+    StructField("nameDest", StringType(), True),
+    StructField("oldbalanceDest", DoubleType(), True),
+    StructField("newbalanceDest", DoubleType(), True),
+    StructField("isFraud", IntegerType(), True),
+    StructField("isFlaggedFraud", IntegerType(), True)
+    ])
+
+# Parse and unpack JSON (raw_payload file of string type)
+parsed_tx_df = raw_tx_df.withColumn("data", from_json(col("raw_payload") , mockingbird_schema)).select("data.*")
+parsed_legacy_df = legacy_df.withColumn("data", from_json(col("raw_payload") , paysim_schema)).select("data.*")
+
+
+# lets standardize schemas one by one
+std_tx_df = parsed_tx_df\
+.withColumnRenamed("user_id","customer_id")\
+.withColumnRenamed("merchant","merchant_id")\
+.withColumn("timestamp", to_timestamp(col("timestamp")))\
+.drop("location")
+
+
+
+std_legacy_df = parsed_legacy_df \
+    .withColumnRenamed("nameOrig", "customer_id") \
+    .withColumnRenamed("nameDest", "merchant_id") \
+    .withColumn("transaction_id", expr("uuid()")) \
+    .withColumn("timestamp", expr("timestamp('2026-07-01 00:00:00') + interval 1 hour * step")) \
+    .drop("step")
+
+# UUID = Universally Unique Identifier.
+
+# lets unify the schema.
+unified_df = std_tx_df.unionByName(std_legacy_df, allowMissingColumns=True)
+
+print("\n--- Unified Schema ---")
+unified_df.printSchema()
