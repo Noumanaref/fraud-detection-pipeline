@@ -115,3 +115,31 @@ unified_df = std_tx_df.unionByName(std_legacy_df, allowMissingColumns=True)
 
 print("\n--- Unified Schema ---")
 unified_df.printSchema()
+
+
+# Step c : DataCleaning and feature flags
+
+print("\n--- Step C: Cleaning Data & Adding Fraud Flags ---")
+
+# drop duplicate transaction_ids
+cleaned_df = unified_df.dropDuplicates(["transaction_id"])
+
+# Handle missing values
+# Fill missing isFlaggedFraud with 0, then drop rows missing critical keys
+
+cleaned_df = cleaned_df.fillna({"isFlaggedFraud": 0})
+cleaned_df = cleaned_df.dropna(subset = ["transaction_id","isFraud"])
+
+## Add rule based fraud flags
+# Use expr() to evaluate boolean logic conditions natively
+
+silver_df = cleaned_df \
+    .withColumn("is_balance_fraud_signal", expr("newbalanceOrig == 0 AND amount > 10000")) \
+    .withColumn("is_data_inconsistency", expr("isFlaggedFraud != isFraud"))
+
+
+
+# --- Verification ---
+print("\n--- Cleaned Silver Data Preview ---")
+print(f"Row count after cleaning: {silver_df.count()}")
+silver_df.select("transaction_id", "amount", "is_balance_fraud_signal", "is_data_inconsistency").show(5, truncate=False)
