@@ -67,28 +67,36 @@ services:
   # ── Spark Master ───────────────────────────────────────────
   # The brain of the Spark cluster — assigns tasks to workers
   # Port 8080 is Spark Master UI, 7077 is where workers connect
+  # ── Spark Master ───────────────────────────────────────────
+  # ── Spark Master ───────────────────────────────────────────
   spark-master:
-    image: apache/spark:3.5.0
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
     environment:
-      - SPARK_NO_DAEMONIZE=true
-    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
     ports:
       - "8080:8080"
       - "7077:7077"
     volumes:
       - ./:/workspace
+      - spark_ivy_cache:/home/spark/.ivy2
+    # Explicitly start the Spark Master daemon
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
 
   spark-worker:
-    image: apache/spark:3.5.0
-    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
     environment:
-      - SPARK_WORKER_MEMORY=2g
-      - SPARK_WORKER_CORES=2
-    depends_on:
-      - spark-master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
     volumes:
       - ./:/workspace
-
+      - spark_ivy_cache:/home/spark/.ivy2
+    # Explicitly start the Spark Worker daemon and connect it to the master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
   # ── Apache Airflow ─────────────────────────────────────────
   # Orchestrates the full pipeline on a schedule
   # We use LocalExecutor which runs tasks as local processes
@@ -130,3 +138,4 @@ volumes:
   mlflow_artifacts:
   grafana_data:
   airflow_logs:
+  spark_ivy_cache:

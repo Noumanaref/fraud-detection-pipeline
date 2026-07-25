@@ -1,0 +1,14 @@
+FROM apache/spark:3.5.0
+
+USER root
+
+# Create the Ivy cache directory and grant universal read/write access
+RUN mkdir -p /home/spark/.ivy2/cache && \
+    chmod -R 777 /home/spark/.ivy2
+
+# Install Python dependencies globally
+RUN python3 -m pip install --upgrade pip && \
+    python3 -m pip install importlib_metadata delta-spark==3.1.0
+
+# Switch back to the official Apache Spark non-root user
+USER 185

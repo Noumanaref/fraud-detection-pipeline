@@ -2,7 +2,7 @@ import os
 from pyspark.sql import SparkSession
 from delta import configure_spark_with_delta_pip
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType
-from pyspark.sql.functions import from_json, col, expr, to_timestamp
+from pyspark.sql.functions import from_json, col, expr, to_timestamp, hour, dayofmonth, dayofweek, when, col
 
 
 # Configuration && partition prunning
@@ -117,7 +117,7 @@ print("\n--- Unified Schema ---")
 unified_df.printSchema()
 
 
-# Step c : DataCleaning and feature flags
+# Step C : DataCleaning and feature flags
 
 print("\n--- Step C: Cleaning Data & Adding Fraud Flags ---")
 
@@ -143,3 +143,70 @@ silver_df = cleaned_df \
 print("\n--- Cleaned Silver Data Preview ---")
 print(f"Row count after cleaning: {silver_df.count()}")
 silver_df.select("transaction_id", "amount", "is_balance_fraud_signal", "is_data_inconsistency").show(5, truncate=False)
+
+
+
+# step D : Lets build star_schema where we have transactions as fact_table
+print("\n--- Step D: Building Star Schema Dimensions ---")
+
+
+# 1. dim_time: Extract time-based features from timestamp
+
+dim_time = silver_df.select("timestamp").distinct() \
+    .withColumn("hour", hour("timestamp")) \
+    .withColumn("day", dayofmonth("timestamp")) \
+    .withColumn("day_of_week",dayofweek("timestamp")) \
+    .withColumn("is_weekend", when(col("day_of_week").isin( 1, 7), True).otherwise(False))
+
+
+# 2. dim_customer: Extract unique customer information
+dim_customer = silver_df.select("customer_id").dropDuplicates(["customer_id"])
+
+# 3. dim_merchant: Extract unique merchant information
+dim_merchant = silver_df.select("merchant_id", "transaction_type").dropDuplicates(["merchant_id"])
+
+# 4. fact_transactions: The core event table (one row per transaction)
+fact_transactions = silver_df.select(
+    "transaction_id", "timestamp", "customer_id", "merchant_id",
+    "amount", "oldbalanceOrg", "newbalanceOrig", "oldbalanceDest",
+    "newbalanceDest", "is_balance_fraud_signal", "is_data_inconsistency",
+    "isFlaggedFraud", "isFraud"
+)
+
+
+print("\n--- Star Schema Row Counts ---")
+print(f"fact_transactions rows: {fact_transactions.count()}")
+print(f"dim_time rows: {dim_time.count()}")
+print(f"dim_customer rows: {dim_customer.count()}")
+print(f"dim_merchant rows: {dim_merchant.count()}")
+
+    
+
+
+# --- Step E: Write to Silver as Delta Lake ---
+
+print("Writing fact_transactions...")
+fact_transactions.write \
+    .format("delta") \
+    .mode("overwrite") \
+    .save("s3a://fraud-detection-lake-nouman/silver/fact_transactions/")
+
+print("Writing dim_time...")
+dim_time.write \
+    .format("delta") \
+    .mode("overwrite") \
+    .save("s3a://fraud-detection-lake-nouman/silver/dim_time/")
+
+print("Writing dim_customer...")
+dim_customer.write \
+    .format("delta") \
+    .mode("overwrite") \
+    .save("s3a://fraud-detection-lake-nouman/silver/dim_customer/")
+
+print("Writing dim_merchant...")
+dim_merchant.write \
+    .format("delta") \
+    .mode("overwrite") \
+    .save("s3a://fraud-detection-lake-nouman/silver/dim_merchant/")
+
+print("--- Silver Transformation Complete! ---")
