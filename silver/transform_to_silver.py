@@ -135,14 +135,14 @@ cleaned_df = cleaned_df.dropna(subset = ["transaction_id","isFraud"])
 
 silver_df = cleaned_df \
     .withColumn("is_balance_fraud_signal", expr("newbalanceOrig == 0 AND amount > 10000")) \
-    .withColumn("is_data_inconsistency", expr("isFlaggedFraud != isFraud"))
+    ##.withColumn("is_data_inconsistency", expr("isFlaggedFraud != isFraud")) - caused data leakage
 
 
 
 # --- Verification ---
 print("\n--- Cleaned Silver Data Preview ---")
 print(f"Row count after cleaning: {silver_df.count()}")
-silver_df.select("transaction_id", "amount", "is_balance_fraud_signal", "is_data_inconsistency").show(5, truncate=False)
+silver_df.select("transaction_id", "amount", "is_balance_fraud_signal").show(5, truncate=False)
 
 
 
@@ -169,7 +169,7 @@ dim_merchant = silver_df.select("merchant_id", "transaction_type").dropDuplicate
 fact_transactions = silver_df.select(
     "transaction_id", "timestamp", "customer_id", "merchant_id",
     "amount", "oldbalanceOrg", "newbalanceOrig", "oldbalanceDest",
-    "newbalanceDest", "is_balance_fraud_signal", "is_data_inconsistency",
+    "newbalanceDest", "is_balance_fraud_signal",
     "isFlaggedFraud", "isFraud"
 )
 

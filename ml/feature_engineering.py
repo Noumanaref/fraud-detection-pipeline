@@ -1,18 +1,27 @@
 import os
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+from delta import configure_spark_with_delta_pip
 
 def create_feature_store():
-    spark = SparkSession.builder \
+    # Initialize Spark Session with Delta Lake cluster support and wrapper
+    builder = SparkSession.builder \
         .appName("GoldFeatureEngineering") \
+        .master("spark://spark-master:7077") \
+        .config("spark.jars.packages",
+                "io.delta:delta-spark_2.12:3.1.0,"
+                "org.apache.hadoop:hadoop-aws:3.3.4,"
+                "com.amazonaws:aws-java-sdk-bundle:1.12.262") \
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
         .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+        .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .config("spark.hadoop.fs.s3a.access.key", os.getenv("AWS_ACCESS_KEY_ID")) \
         .config("spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY")) \
-        .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com") \
-        .getOrCreate()
+        .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com")
 
-    print("Spark Session initialized successfully for Feature Engineering!")
+    spark = configure_spark_with_delta_pip(builder).getOrCreate()
+
+    print("Spark Session initialized successfully with Delta & Cluster support!")
 
     silver_fact_path = "s3a://fraud-detection-lake-nouman/silver/fact_transactions/"
     silver_customer_path = "s3a://fraud-detection-lake-nouman/silver/dim_customer/"
