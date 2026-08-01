@@ -6,8 +6,11 @@ from pyspark.sql import SparkSession
 from delta import configure_spark_with_delta_pip
 from sklearn.metrics import roc_auc_score, precision_recall_curve, auc
 
-# Force MLflow to point to the MLflow container service name defined in docker-compose.yml
-os.environ["MLFLOW_TRACKING_URI"] = "file:///workspace/mlruns"
+# 1. Force MLflow to point to the central tracking server and shared volume artifact path
+mlflow.set_tracking_uri("http://mlflow:5000")
+
+
+
 
 def train_fraud_model():
     # 1. Initialize Spark Session with Delta Lake and Cluster support
