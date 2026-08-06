@@ -23,8 +23,8 @@ def create_feature_store():
 
     print("Spark Session initialized successfully with Delta & Cluster support!")
 
-    silver_fact_path = "s3a://fraud-detection-lake-nouman/silver/fact_transactions/"
-    silver_customer_path = "s3a://fraud-detection-lake-nouman/silver/dim_customer/"
+    silver_fact_path = "s3a://fraud-detection-lake-nouman-v2-v2/silver/fact_transactions/"
+    silver_customer_path = "s3a://fraud-detection-lake-nouman-v2-v2/silver/dim_customer/"
 
     print(f"Reading Silver fact_transactions from: {silver_fact_path}")
     fact_df = spark.read.format("delta").load(silver_fact_path)
@@ -59,7 +59,7 @@ def create_feature_store():
     feature_df.printSchema()
     feature_df.show(5, truncate=False)
 
-    gold_output_path = "s3a://fraud-detection-lake-nouman/gold/ml_features/"
+    gold_output_path = "s3a://fraud-detection-lake-nouman-v2-v2/gold/ml_features/"
     print(f"Writing processed ML features to Gold layer: {gold_output_path}")
 
     feature_df.write \

@@ -4,13 +4,10 @@ import mlflow.xgboost
 import xgboost as xgb
 from pyspark.sql import SparkSession
 from delta import configure_spark_with_delta_pip
-from sklearn.metrics import roc_auc_score, precision_recall_curve, auc
+from sklearn.metrics import roc_auc_score, precision_score
 
-# 1. Force MLflow to point to the central tracking server and shared volume artifact path
-mlflow.set_tracking_uri("http://mlflow:5000")
-
-
-
+# 1. Force MLflow to point to the central tracking server
+mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
 
 def train_fraud_model():
     # 1. Initialize Spark Session with Delta Lake and Cluster support
@@ -32,7 +29,7 @@ def train_fraud_model():
     print("Spark Session initialized successfully for Model Training!")
 
     # 2. Read the Gold Layer Feature Store Table from S3
-    gold_feature_path = "s3a://fraud-detection-lake-nouman/gold/ml_features/"
+    gold_feature_path = "s3a://fraud-detection-lake-nouman-v2-v2/gold/ml_features/"
     print(f"Reading Gold features from: {gold_feature_path}")
     feature_df = spark.read.format("delta").load(gold_feature_path)
 
@@ -65,45 +62,40 @@ def train_fraud_model():
     # 6. Configure MLflow Experiment Tracking & Training
     mlflow.set_experiment("fraud_detection_xgboost")
 
+    # Define Hyperparameters
+    params = {
+        "n_estimators": 100,
+        "max_depth": 5,
+        "learning_rate": 0.1,
+        "scale_pos_weight": 773,  # Fix for the 773:1 class imbalance ratio
+        "eval_metric": "logloss",
+        "random_state": 42
+    }
+
+    print("Training XGBoost Classifier...")
+    model = xgb.XGBClassifier(**params)
+
     with mlflow.start_run() as run:
-        # Define Hyperparameters
-        params = {
-            "n_estimators": 100,
-            "max_depth": 5,
-            "learning_rate": 0.1,
-            "scale_pos_weight": 773,  # Fix for the 773:1 class imbalance ratio
-            "eval_metric": "logloss",
-            "random_state": 42
-        }
-
-        # Log parameters to MLflow
         mlflow.log_params(params)
-
-        print("Training XGBoost Classifier...")
-        model = xgb.XGBClassifier(**params)
+        
+        # Train
         model.fit(X_train, y_train)
-
-        print("Feature Importances:")
-        for col, imp in zip(feature_cols, model.feature_importances_):
-            print(f"  {col}: {imp:.4f}")
-
-        # Predict probabilities on test set
+        
+        # Evaluate
+        y_pred = model.predict(X_test)
         y_pred_prob = model.predict_proba(X_test)[:, 1]
-
-        # Calculate Evaluation Metrics
-        roc_auc = roc_auc_score(y_test, y_pred_prob)
-        precision, recall, _ = precision_recall_curve(y_test, y_pred_prob)
-        pr_auc = auc(recall, precision)
-
-        print(f"Model Evaluation Metrics -> ROC-AUC: {roc_auc:.4f} | PR-AUC: {pr_auc:.4f}")
-
-        # Log metrics to MLflow
-        mlflow.log_metric("roc_auc", roc_auc)
-        mlflow.log_metric("pr_auc", pr_auc)
-
-        # Log trained model artifact to MLflow
-        mlflow.xgboost.log_model(model, "xgboost_model")
-        print("Model successfully logged to MLflow!")
+        auc = roc_auc_score(y_test, y_pred_prob)
+        precision = precision_score(y_test, y_pred)
+        
+        # Log metrics
+        mlflow.log_metric("auc", auc)
+        mlflow.log_metric("precision", precision)
+        
+        # Log model 
+        mlflow.xgboost.log_model(model, "xgboost_fraud_model")
+        
+        print(f"Run ID: {run.info.run_id}")
+        print(f"AUC: {auc:.4f} | Precision: {precision:.4f}")
 
     spark.stop()
 

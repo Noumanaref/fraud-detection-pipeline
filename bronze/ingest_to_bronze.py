@@ -5,7 +5,7 @@ from pyspark.sql.functions import year, month, dayofmonth, col
 KAFKA_BROKER = "kafka:9092"  # Internal Docker network — Spark runs inside Docker
 KAFKA_TOPICS = "raw_transactions,legacy_batch"
 
-BRONZE_BUCKET = "s3a://fraud-detection-lake-nouman"
+BRONZE_BUCKET = "s3a://fraud-detection-lake-nouman-v2-v2"
 BRONZE_PATH = f"{BRONZE_BUCKET}/bronze"
 CHECKPOINT_PATH = f"{BRONZE_BUCKET}/checkpoints/bronze"
 

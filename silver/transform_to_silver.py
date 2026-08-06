@@ -13,8 +13,8 @@ MONTH = 7
 DAY = 20
 
 
-BRONZE_RAW_TX_PATH = f"s3a://fraud-detection-lake-nouman/bronze/raw_transactions/year={YEAR}/month={MONTH}/day={DAY}/"
-BRONZE_LEGACY_PATH = f"s3a://fraud-detection-lake-nouman/bronze/legacy_batch/year={YEAR}/month={MONTH}/day={DAY}/"
+BRONZE_RAW_TX_PATH = f"s3a://fraud-detection-lake-nouman-v2-v2/bronze/raw_transactions/year={YEAR}/month={MONTH}/day={DAY}/"
+BRONZE_LEGACY_PATH = f"s3a://fraud-detection-lake-nouman-v2-v2/bronze/legacy_batch/year={YEAR}/month={MONTH}/day={DAY}/"
 
 
 # initialize sparkSession with delta-lake
@@ -189,24 +189,24 @@ print("Writing fact_transactions...")
 fact_transactions.write \
     .format("delta") \
     .mode("overwrite") \
-    .save("s3a://fraud-detection-lake-nouman/silver/fact_transactions/")
+    .save("s3a://fraud-detection-lake-nouman-v2-v2/silver/fact_transactions/")
 
 print("Writing dim_time...")
 dim_time.write \
     .format("delta") \
     .mode("overwrite") \
-    .save("s3a://fraud-detection-lake-nouman/silver/dim_time/")
+    .save("s3a://fraud-detection-lake-nouman-v2-v2/silver/dim_time/")
 
 print("Writing dim_customer...")
 dim_customer.write \
     .format("delta") \
     .mode("overwrite") \
-    .save("s3a://fraud-detection-lake-nouman/silver/dim_customer/")
+    .save("s3a://fraud-detection-lake-nouman-v2-v2/silver/dim_customer/")
 
 print("Writing dim_merchant...")
 dim_merchant.write \
     .format("delta") \
     .mode("overwrite") \
-    .save("s3a://fraud-detection-lake-nouman/silver/dim_merchant/")
+    .save("s3a://fraud-detection-lake-nouman-v2-v2/silver/dim_merchant/")
 
 print("--- Silver Transformation Complete! ---")
