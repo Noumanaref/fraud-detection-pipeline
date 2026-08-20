@@ -13,7 +13,7 @@ def train_fraud_model():
     # 1. Initialize Spark Session with Delta Lake and Cluster support
     builder = SparkSession.builder \
         .appName("FraudModelTraining") \
-        .master("spark://spark-master:7077") \
+        .master("local[2]") \
         .config("spark.jars.packages",
                 "io.delta:delta-spark_2.12:3.1.0,"
                 "org.apache.hadoop:hadoop-aws:3.3.4,"
@@ -29,7 +29,7 @@ def train_fraud_model():
     print("Spark Session initialized successfully for Model Training!")
 
     # 2. Read the Gold Layer Feature Store Table from S3
-    gold_feature_path = "s3a://fraud-detection-lake-nouman-v2-v2/gold/ml_features/"
+    gold_feature_path = "s3a://fraud-detection-lake-nouman-v2/gold/ml_features/"
     print(f"Reading Gold features from: {gold_feature_path}")
     feature_df = spark.read.format("delta").load(gold_feature_path)
 

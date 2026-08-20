@@ -9,18 +9,18 @@ from pyspark.sql.functions import from_json, col, expr, to_timestamp, hour, dayo
 # for now we will hard_code the partition prunning later airflow in M7 will pass this dynamically
 
 YEAR = 2026
-MONTH = 7
-DAY = 20
+MONTH = 8
+DAY = 15
 
 
-BRONZE_RAW_TX_PATH = f"s3a://fraud-detection-lake-nouman-v2-v2/bronze/raw_transactions/year={YEAR}/month={MONTH}/day={DAY}/"
-BRONZE_LEGACY_PATH = f"s3a://fraud-detection-lake-nouman-v2-v2/bronze/legacy_batch/year={YEAR}/month={MONTH}/day={DAY}/"
+BRONZE_RAW_TX_PATH = f"s3a://fraud-detection-lake-nouman-v2/bronze/raw_transactions/year={YEAR}/month={MONTH}/day={DAY}/"
+BRONZE_LEGACY_PATH = f"s3a://fraud-detection-lake-nouman-v2/bronze/legacy_batch/year={YEAR}/month={MONTH}/day={DAY}/"
 
 
 # initialize sparkSession with delta-lake
 builder = SparkSession.builder \
     .appName("SilverTransformation") \
-    .master("spark://spark-master:7077") \
+    .master("local[2]") \
     .config("spark.jars.packages",
         "io.delta:delta-spark_2.12:3.1.0,"
         "org.apache.hadoop:hadoop-aws:3.3.4,"
@@ -135,7 +135,7 @@ cleaned_df = cleaned_df.dropna(subset = ["transaction_id","isFraud"])
 
 silver_df = cleaned_df \
     .withColumn("is_balance_fraud_signal", expr("newbalanceOrig == 0 AND amount > 10000")) \
-    ##.withColumn("is_data_inconsistency", expr("isFlaggedFraud != isFraud")) - caused data leakage
+    .withColumn("is_data_inconsistency", expr("isFlaggedFraud != isFraud")) 
 
 
 
@@ -169,7 +169,7 @@ dim_merchant = silver_df.select("merchant_id", "transaction_type").dropDuplicate
 fact_transactions = silver_df.select(
     "transaction_id", "timestamp", "customer_id", "merchant_id",
     "amount", "oldbalanceOrg", "newbalanceOrig", "oldbalanceDest",
-    "newbalanceDest", "is_balance_fraud_signal",
+    "newbalanceDest", "is_balance_fraud_signal","is_data_inconsistency",
     "isFlaggedFraud", "isFraud"
 )
 
@@ -185,28 +185,36 @@ print(f"dim_merchant rows: {dim_merchant.count()}")
 
 # --- Step E: Write to Silver as Delta Lake ---
 
+# we have explicitely overwritten the schema because delta lake detects the schema change because in our older
+# version we did not had is_data_consistency feature where as our new schema included this feature X.
+
 print("Writing fact_transactions...")
 fact_transactions.write \
     .format("delta") \
     .mode("overwrite") \
-    .save("s3a://fraud-detection-lake-nouman-v2-v2/silver/fact_transactions/")
+    .option("overwriteSchema" , "true") \
+    .save("s3a://fraud-detection-lake-nouman-v2/silver/fact_transactions/")
 
 print("Writing dim_time...")
 dim_time.write \
     .format("delta") \
     .mode("overwrite") \
-    .save("s3a://fraud-detection-lake-nouman-v2-v2/silver/dim_time/")
+    .option("overwriteSchema" , "true") \
+    .save("s3a://fraud-detection-lake-nouman-v2/silver/dim_time/")
 
 print("Writing dim_customer...")
 dim_customer.write \
     .format("delta") \
     .mode("overwrite") \
-    .save("s3a://fraud-detection-lake-nouman-v2-v2/silver/dim_customer/")
+    .option("overwriteSchema" , "true") \
+    .save("s3a://fraud-detection-lake-nouman-v2/silver/dim_customer/")
+
 
 print("Writing dim_merchant...")
 dim_merchant.write \
     .format("delta") \
     .mode("overwrite") \
-    .save("s3a://fraud-detection-lake-nouman-v2-v2/silver/dim_merchant/")
+    .option("overwriteSchema" , "true")\
+    .save("s3a://fraud-detection-lake-nouman-v2/silver/dim_merchant/")
 
 print("--- Silver Transformation Complete! ---")
