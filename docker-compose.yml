@@ -60,6 +60,7 @@ services:
     environment:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      GUNICORN_CMD_ARGS: "--bind=0.0.0.0:5000"
     command: >
       bash -c "pip install psycopg2-binary boto3 -q &&
                mlflow server
