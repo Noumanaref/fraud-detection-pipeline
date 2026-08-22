@@ -102,6 +102,8 @@ def train_fraud_model():
 
         print(f"Run ID: {run.info.run_id}")
         print(f"AUC: {auc:.4f} | Precision: {precision:.4f}")
+    mlflow.register_model(model_uri=f"runs:/{run.info.run_id}/xgboost_fraud_model", name="fraud_detection_xgboost")
+
 
     spark.stop()
 
