@@ -54,24 +54,27 @@ services:
       retries: 5
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.9.0
+    build:
+      context: ./docker/mlflow
+      dockerfile: Dockerfile
+    image: fraud-mlflow:latest
     ports:
       - "5000:5000"
     environment:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      GUNICORN_CMD_ARGS: "--bind=0.0.0.0:5000"
     command: >
-      bash -c "pip install psycopg2-binary boto3 -q &&
-               mlflow server
-               --host 0.0.0.0
-               --port 5000
-               --backend-store-uri postgresql://fraud_user:fraud_pass@postgres:5432/fraud_db
-               --default-artifact-root s3://fraud-detection-lake-nouman-v2/mlflow/artifacts"
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri postgresql://fraud_user:fraud_pass@postgres:5432/fraud_db
+      --default-artifact-root s3://fraud-detection-lake-nouman-v2/mlflow/artifacts
     depends_on:
       postgres:
         condition: service_healthy
-
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts
+      
   # ── Spark Master ───────────────────────────────────────────
   # The brain of the Spark cluster — assigns tasks to workers
   # Port 8080 is Spark Master UI, 7077 is where workers connect
