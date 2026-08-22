@@ -4,7 +4,7 @@ import mlflow.xgboost
 import tempfile  ## temporary directory - thhis is python's built in module. it will create folder and will auto delte when done.
 import xgboost as xgb
 from pyspark.sql import SparkSession
-from delta import configure_spark_docwith_delta_pip
+from delta import configure_spark_with_delta_pip
 from sklearn.metrics import roc_auc_score, precision_score
 
 # 1. Force MLflow to point to the central tracking server
@@ -61,7 +61,7 @@ def train_fraud_model():
     print(f"Training set shape: {X_train.shape}, Testing set shape: {X_test.shape}")
 
     # 6. Configure MLflow Experiment Tracking & Training
-    mlflow.set_experiment("fraud_detection_xgboost")
+    mlflow.set_experiment("fraud_detection_xgboost_v2")
 
     # Define Hyperparameters
     params = {
@@ -94,8 +94,12 @@ def train_fraud_model():
         mlflow.log_metric("precision", precision)
         
         # Log model 
-        mlflow.xgboost.log_model(model, artifact_path = "xgboost_fraud_model")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model_path = os.path.join(tmp_dir, "model.json")
+            model.save_model(model_path)
+            mlflow.log_artifact(model_path, artifact_path = "xgboost_fraud_model")
         
+
         print(f"Run ID: {run.info.run_id}")
         print(f"AUC: {auc:.4f} | Precision: {precision:.4f}")
 
