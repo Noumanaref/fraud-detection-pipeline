@@ -1,4 +1,5 @@
 import os
+import time
 import tempfile
 import pandas as pd
 import xgboost as xgb
@@ -26,9 +27,12 @@ def send_slack_alerts(dataframe):
         print("No high-risk transactions found in this batch. No alerts sent.")
         return
 
-    print(f"Triggering {len(high_risk_df)} Slack alerts for high-risk transactions...")
+    # Sort with top 10 high risk_transactions rather than theorwing all for now.
+    top_risks_df = high_risk_df.sort_values(by = "fraud_score", ascending=False).head(10)
+
+    print(f"Triggering {len(top_risks_df)} Slack alerts for high-risk transactions...")
     
-    for _, row in high_risk_df.iterrows():
+    for _, row in top_risks_df.iterrows():
         # message format tahat will ve sent to slack
         message = f"ALERT: Transaction {row['transaction_id']}, Amount ${row['amount']:.2f}, Score: {row['fraud_score']:.4f}"
         payload = {"text": message}
@@ -42,6 +46,7 @@ def send_slack_alerts(dataframe):
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             print(f"Failed to send alert for {row['transaction_id']}: {e}")
+        time.sleep(1)
 
 def run_batch_inference():
     print("Connecting to MLflow Registry...")
