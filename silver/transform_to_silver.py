@@ -1,9 +1,10 @@
 import os
 from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
 from delta import configure_spark_with_delta_pip
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType
 from pyspark.sql.functions import from_json, col, expr, to_timestamp, hour, dayofmonth, dayofweek, when, col
-
+from pyspark.sql.functions import sha2, concat_ws, lit, current_timestamp, coalesce
 
 # Configuration && partition prunning
 # for now we will hard_code the partition prunning later airflow in M7 will pass this dynamically
@@ -104,11 +105,10 @@ std_tx_df = parsed_tx_df\
 std_legacy_df = parsed_legacy_df \
     .withColumnRenamed("nameOrig", "customer_id") \
     .withColumnRenamed("nameDest", "merchant_id") \
-    .withColumn("transaction_id", expr("uuid()")) \
+    .withColumn("transaction_id", sha2(concat_ws("_", col("customer_id"), col("merchant_id"), col("amount"), col("step")), 256))  \
     .withColumn("timestamp", expr("timestamp('2026-07-01 00:00:00') + interval 1 hour * step")) \
     .drop("step")
 
-# UUID = Universally Unique Identifier.
 
 # lets unify the schema.
 unified_df = std_tx_df.unionByName(std_legacy_df, allowMissingColumns=True)
@@ -147,37 +147,66 @@ silver_df.select("transaction_id", "amount", "is_balance_fraud_signal").show(5, 
 
 
 # step D : Lets build star_schema where we have transactions as fact_table
-print("\n--- Step D: Building Star Schema Dimensions ---")
+print("\n--- Building Star Schema Dimensions ---")
 
-
-# 1. dim_time: Extract time-based features from timestamp
 
 dim_time = silver_df.select("timestamp").distinct() \
+    .withColumn("time_id", sha2(col("timestamp").cast("string"), 256)) \
+    .withColumn("full_timestamp", col("timestamp")) \
     .withColumn("hour", hour("timestamp")) \
     .withColumn("day", dayofmonth("timestamp")) \
-    .withColumn("day_of_week",dayofweek("timestamp")) \
-    .withColumn("is_weekend", when(col("day_of_week").isin( 1, 7), True).otherwise(False))
+    .withColumn("month", expr("month(timestamp)")) \
+    .withColumn("year", expr("year(timestamp)")) \
+    .withColumn("day_of_week", col("timestamp").cast("string")) \
+    .withColumn("is_weekend", when(dayofweek("timestamp").isin(1, 7), True).otherwise(False)) \
+    .dropDuplicates(["time_id"])
 
 
-# 2. dim_customer: Extract unique customer information
-dim_customer = silver_df.select("customer_id").dropDuplicates(["customer_id"])
 
-# 3. dim_merchant: Extract unique merchant information
-dim_merchant = silver_df.select("merchant_id", "transaction_type").dropDuplicates(["merchant_id"])
+# 2. dim_user (SCD Type 2 Layout): Add tracking attributes and default validity flags
+dim_user = silver_df.select("customer_id").distinct() \
+    .withColumn("user_id", col("customer_id")) \
+    .withColumn("customer_name", lit("Unknown User")) \
+    .withColumn("risk_tier", lit("Standard")) \
+    .withColumn("registered_location", lit("Sialkot, PK")) \
+    .withColumn("account_age_days", lit(365)) \
+    .withColumn("valid_from", current_timestamp()) \
+    .withColumn("valid_to", lit(None).cast("timestamp")) \
+    .withColumn("is_current", lit(True)) \
+    .drop("customer_id") \
+    .dropDuplicates(["user_id"])
 
-# 4. fact_transactions: The core event table (one row per transaction)
-fact_transactions = silver_df.select(
-    "transaction_id", "timestamp", "customer_id", "merchant_id",
-    "amount", "oldbalanceOrg", "newbalanceOrig", "oldbalanceDest",
-    "newbalanceDest", "is_balance_fraud_signal","is_data_inconsistency",
-    "isFlaggedFraud", "isFraud"
-)
+
+# 3. dim_merchant (SCD Type 1 Layout): Add descriptive attributes
+dim_merchant = silver_df.select("merchant_id", "transaction_type").distinct() \
+    .withColumn("merchant_id", sha2(col("merchant_id"), 256)) \
+    .withColumn("merchant_name", lit("Retail Partner")) \
+    .withColumn("merchant_category", col("transaction_type")) \
+    .withColumn("terminal_location", lit("Online")) \
+    .withColumn("channel", lit("Digital")) \
+    .drop("transaction_type") \
+    .dropDuplicates(["merchant_id"])
+
+
+# 4. fact_fraud_inference: Align fact table columns with foreign key hashes
+fact_fraud_inference = silver_df \
+    .withColumn("user_id", col("customer_id")) \
+    .withColumn("merchant_id", sha2(col("merchant_id"), 256)) \
+    .withColumn("time_id", sha2(col("timestamp").cast("string"), 256)) \
+    .withColumn("model_id", lit("placeholder_model_id")) \
+    .select(
+        "transaction_id", "user_id", "merchant_id", "time_id", "model_id",
+        col("amount").alias("transaction_amount"),
+        col("isFraud").alias("is_fraud"),
+        lit(15.5).alias("inference_latency_ms"), # Mock inference latency for stream/batch
+        col("timestamp").alias("inference_timestamp")
+    )
 
 
 print("\n--- Star Schema Row Counts ---")
-print(f"fact_transactions rows: {fact_transactions.count()}")
+print(f"fact_fraud_inference rows: {fact_fraud_inference.count()}")
 print(f"dim_time rows: {dim_time.count()}")
-print(f"dim_customer rows: {dim_customer.count()}")
+print(f"dim_user rows: {dim_user.count()}")
 print(f"dim_merchant rows: {dim_merchant.count()}")
 
     
@@ -187,34 +216,84 @@ print(f"dim_merchant rows: {dim_merchant.count()}")
 
 # we have explicitely overwritten the schema because delta lake detects the schema change because in our older
 # version we did not had is_data_consistency feature where as our new schema included this feature X.
+FACT_PATH = "s3a://fraud-detection-lake-nouman-v2/silver/fact_fraud_inference/"
+TIME_PATH = "s3a://fraud-detection-lake-nouman-v2/silver/dim_time/"
+USER_PATH = "s3a://fraud-detection-lake-nouman-v2/silver/dim_user/"
+MERCHANT_PATH = "s3a://fraud-detection-lake-nouman-v2/silver/dim_merchant/"
 
-print("Writing fact_transactions...")
-fact_transactions.write \
-    .format("delta") \
-    .mode("overwrite") \
-    .option("overwriteSchema" , "true") \
-    .save("s3a://fraud-detection-lake-nouman-v2/silver/fact_transactions/")
+# 1. Fact Table (Idempotent Append/Merge) 
 
+print("Writing fact_fraud_inference...")
+
+if DeltaTable.isDeltaTable(spark, FACT_PATH):
+    delta_fact = DeltaTable.forPath(spark, FACT_PATH)
+    delta_fact.alias("target").merge(
+        fact_fraud_inference.alias("source"),
+        "target.transaction_id = source.transaction_id"
+    ).whenNotMatchedInsertAll().execute()
+else:
+    fact_fraud_inference.write.format("delta").mode("overwrite").save(FACT_PATH)
+
+
+
+# 2. Dim Time (Merge to avoid duplicates)
 print("Writing dim_time...")
-dim_time.write \
-    .format("delta") \
-    .mode("overwrite") \
-    .option("overwriteSchema" , "true") \
-    .save("s3a://fraud-detection-lake-nouman-v2/silver/dim_time/")
-
-print("Writing dim_customer...")
-dim_customer.write \
-    .format("delta") \
-    .mode("overwrite") \
-    .option("overwriteSchema" , "true") \
-    .save("s3a://fraud-detection-lake-nouman-v2/silver/dim_customer/")
+if DeltaTable.isDeltaTable(spark, TIME_PATH):
+    delta_time = DeltaTable.forPath(spark, TIME_PATH)
+    delta_time.alias("target").merge(
+        dim_time.alias("source"),
+        "target.time_id = source.time_id"
+    ).whenNotMatchedInsertAll().execute()
+else:
+    dim_time.write.format("delta").mode("overwrite").save(TIME_PATH)
 
 
-print("Writing dim_merchant...")
-dim_merchant.write \
-    .format("delta") \
-    .mode("overwrite") \
-    .option("overwriteSchema" , "true")\
-    .save("s3a://fraud-detection-lake-nouman-v2/silver/dim_merchant/")
+# # 3. Dim Merchant - SCD Type 1 (Upsert/Overwrite attributes)  - UPSERT
+print("Writing dim_merchant (SCD Type 1)...")
+if DeltaTable.isDeltaTable(spark, MERCHANT_PATH):
+    delta_merchant = DeltaTable.forPath(spark, MERCHANT_PATH)
+    delta_merchant.alias("target").merge(
+        dim_merchant.alias("source"),
+        "target.merchant_id = source.merchant_id"
+    ).whenMatchedUpdate(set={
+        "merchant_name": col("source.merchant_name"),
+        "merchant_category": col("source.merchant_category"),
+        "terminal_location": col("source.terminal_location"),
+        "channel": col("source.channel")
+    }).whenNotMatchedInsertAll().execute()
+else:
+    dim_merchant.write.format("delta").mode("overwrite").save(MERCHANT_PATH)
 
-print("--- Silver Transformation Complete! ---")
+
+
+# 4. Dim User - SCD Type 2 (History Tracking)
+print("Writing dim_user (SCD Type 2)...")
+if not DeltaTable.isDeltaTable(spark, USER_PATH):
+    dim_user.write.format("delta").mode("overwrite").save(USER_PATH)
+else:
+    # SCD Type 2 Merge Strategy: Expire old rows and insert updated rows
+    delta_user = DeltaTable.forPath(spark, USER_PATH)
+    
+    # Identify updates where attributes changed
+    # (Simplified for pipeline flow: handles new entries & basic tracking updates)
+    dim_user.createOrReplaceTempView("incoming_users")
+    
+    spark.sql(f"""
+        MERGE INTO delta.`{USER_PATH}` target
+        USING incoming_users source
+        ON target.user_id = source.user_id AND target.is_current = true
+        WHEN MATCHED AND (target.risk_tier != source.risk_tier OR target.registered_location != source.registered_location) THEN
+          UPDATE SET target.is_current = false, target.valid_to = current_timestamp()
+    """)
+    
+    # Insert brand new records or newly expired record variants as current active rows
+    delta_user.alias("target").merge(
+        dim_user.alias("source"),
+        "target.user_id = source.user_id AND target.is_current = true"
+    ).whenNotMatchedInsertAll().execute()
+
+
+
+
+
+print("--- Silver Transformation & Star Schema S3 Loading Complete! ---")
