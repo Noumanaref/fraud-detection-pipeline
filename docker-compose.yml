@@ -80,6 +80,7 @@ services:
   # Port 8080 is Spark Master UI, 7077 is where workers connect
   # ── Spark Master ───────────────────────────────────────────
   # ── Spark Master ───────────────────────────────────────────
+  # ── Spark Master ───────────────────────────────────────────
   spark-master:
     image: apache/spark:3.5.0
     user: root
@@ -92,10 +93,11 @@ services:
       - ./:/workspace
       - spark_deps:/root/.local
     command: >
-      bash -c "pip install delta-spark==3.1.0 mlflow==2.9.0 xgboost scikit-learn importlib_metadata -q &&
+      bash -c "pip install delta-spark==3.1.0 mlflow==2.9.0 xgboost scikit-learn importlib-metadata==7.0.1 boto3 &&
                mkdir -p /home/spark/.ivy2/cache &&
-               /opt/entrypoint.sh"
+               /opt/entrypoint.sh /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master"
 
+  # ── Spark Worker ───────────────────────────────────────────
   spark-worker:
     image: apache/spark:3.5.0
     user: root
@@ -107,8 +109,9 @@ services:
     volumes:
       - ./:/workspace
     command: >
-      bash -c "pip install delta-spark==3.1.0 mlflow==2.9.0 xgboost scikit-learn importlib_metadata -q &&
-               /opt/entrypoint.sh"
+      bash -c "pip install delta-spark==3.1.0 mlflow==2.9.0 xgboost scikit-learn importlib-metadata==7.0.1 boto3 &&
+               /opt/entrypoint.sh /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077"
+
   # ── Apache Airflow ─────────────────────────────────────────
   # Orchestrates the full pipeline on a schedule
   # We use LocalExecutor which runs tasks as local processes

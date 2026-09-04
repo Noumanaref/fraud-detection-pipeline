@@ -23,3 +23,5 @@ dvc-s3==3.0.0
 
 # Testing
 pytest==7.4.0
+
+psycopg2-binary==2.9.9

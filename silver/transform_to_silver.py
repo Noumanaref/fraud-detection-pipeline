@@ -189,6 +189,7 @@ dim_merchant = silver_df.select("merchant_id", "transaction_type").distinct() \
 
 
 # 4. fact_fraud_inference: Align fact table columns with foreign key hashes
+
 fact_fraud_inference = silver_df \
     .withColumn("user_id", col("customer_id")) \
     .withColumn("merchant_id", sha2(col("merchant_id"), 256)) \
@@ -197,8 +198,11 @@ fact_fraud_inference = silver_df \
     .select(
         "transaction_id", "user_id", "merchant_id", "time_id", "model_id",
         col("amount").alias("transaction_amount"),
+        "oldbalanceOrg",
+        "newbalanceOrig",
+        "is_balance_fraud_signal",
         col("isFraud").alias("is_fraud"),
-        lit(15.5).alias("inference_latency_ms"), # Mock inference latency for stream/batch
+        lit(0.0).alias("inference_latency_ms"),
         col("timestamp").alias("inference_timestamp")
     )
 
@@ -233,6 +237,7 @@ if DeltaTable.isDeltaTable(spark, FACT_PATH):
     ).whenNotMatchedInsertAll().execute()
 else:
     fact_fraud_inference.write.format("delta").mode("overwrite").save(FACT_PATH)
+
 
 
 

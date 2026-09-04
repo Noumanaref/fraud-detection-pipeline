@@ -47,7 +47,7 @@ def evaluate_and_promote_model():
     pdf = feature_df.toPandas()
     pdf = pdf.sort_values("timestamp").reset_index(drop=True)
 
-    feature_cols = ["amount", "oldbalanceOrg", "newbalanceOrig", "is_balance_fraud_signal"]
+    feature_cols = ["transaction_amount", "oldbalanceOrg", "newbalanceOrig", "is_balance_fraud_signal"]
     target_col = "isFraud"
 
     X = pdf[feature_cols]

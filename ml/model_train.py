@@ -43,7 +43,7 @@ def train_fraud_model():
 
     # 4. Define feature columns and target label
     feature_cols = [
-        "amount", 
+        "transaction_amount", 
         "oldbalanceOrg", 
         "newbalanceOrig", 
         "is_balance_fraud_signal"
