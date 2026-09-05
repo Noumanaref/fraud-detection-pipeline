@@ -1,9 +1,7 @@
-
 FROM apache/spark:3.5.0
 
 USER root
 
- Install all Python dependencies at build time — never at runtime
 RUN pip install \
     delta-spark==3.1.0 \
     mlflow==2.14.0 \
@@ -14,7 +12,5 @@ RUN pip install \
     requests==2.31.0 \
     importlib_metadata \
     --no-cache-dir
-# Create ivy cache directory
-RUN mkdir -p /home/spark/.ivy2/cache
 
-USER root
+RUN mkdir -p /home/spark/.ivy2/cache

@@ -76,11 +76,13 @@ services:
       - mlflow_artifacts:/mlflow/artifacts
       
   # ── Spark Master ───────────────────────────────────────────
+  # The brain of the Spark cluster — assigns tasks to workers
+  # Port 8080 is Spark Master UI, 7077 is where workers connect
+  # ── Spark Master ───────────────────────────────────────────
+  # ── Spark Master ───────────────────────────────────────────
+  # ── Spark Master ───────────────────────────────────────────
   spark-master:
-    build:
-      context: ./docker/spark
-      dockerfile: Dockerfile
-    image: fraud-spark:latest
+    image: apache/spark:3.5.0
     user: root
     environment:
       - SPARK_MODE=master
@@ -89,11 +91,15 @@ services:
       - "7077:7077"
     volumes:
       - ./:/workspace
+      - spark_deps:/root/.local
     command: >
-      bash -c "/opt/entrypoint.sh /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master"
+      bash -c "pip install delta-spark==3.1.0 mlflow==2.9.0 xgboost scikit-learn importlib-metadata==7.0.1 boto3 &&
+               mkdir -p /home/spark/.ivy2/cache &&
+               /opt/entrypoint.sh /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master"
 
+  # ── Spark Worker ───────────────────────────────────────────
   spark-worker:
-    image: fraud-spark:latest
+    image: apache/spark:3.5.0
     user: root
     environment:
       - SPARK_MODE=worker
@@ -103,14 +109,13 @@ services:
     volumes:
       - ./:/workspace
     command: >
-      bash -c "/opt/entrypoint.sh /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077"
-
-
-
-
-
+      bash -c "pip install delta-spark==3.1.0 mlflow==2.9.0 xgboost scikit-learn importlib-metadata==7.0.1 boto3 &&
+               /opt/entrypoint.sh /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077"
 
   # ── Apache Airflow ─────────────────────────────────────────
+  # Orchestrates the full pipeline on a schedule
+  # We use LocalExecutor which runs tasks as local processes
+  # Good enough for development — no need for Celery/Redis complexity
   airflow:
     image: apache/airflow:2.8.0
     depends_on:
@@ -119,12 +124,12 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://fraud_user:fraud_pass@postgres:5432/fraud_db
       AIRFLOW__CORE__FERNET_KEY: ''
-      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'  # don't load tutorial DAGs
       AIRFLOW__WEBSERVER__SECRET_KEY: 'fraud_secret_key'
     ports:
-      - "8081:8080"
+      - "8081:8080"   # Airflow Web UI
     volumes:
-      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/dags:/opt/airflow/dags   # your DAG files
       - airflow_logs:/opt/airflow/logs
     command: >
       bash -c "airflow db init &&
