@@ -36,10 +36,10 @@ def create_feature_store():
 
     print("Columns available in fact_df:", fact_df.columns)
 
-    print("Joining fact_transactions with dim_customer...")
+    print("Joining fact_transactions with dim_customer (using Broadcast Join)...")
 
 
-    feature_df = fact_df.join(customer_df, fact_df.user_id == customer_df.user_id, "inner") \
+    feature_df = fact_df.join(F.broadcast(customer_df), fact_df.user_id == customer_df.user_id, "inner") \
         .select(
             fact_df.transaction_id,
             fact_df.inference_timestamp.alias("timestamp"),

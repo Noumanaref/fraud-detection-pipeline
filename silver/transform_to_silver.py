@@ -213,13 +213,45 @@ print(f"dim_time rows: {dim_time.count()}")
 print(f"dim_user rows: {dim_user.count()}")
 print(f"dim_merchant rows: {dim_merchant.count()}")
 
+
+print("\n--- Spark Execution Plan for fact_fraud_inference ---")
+fact_fraud_inference.explain(mode="formatted")
+
+
+# Data Quality Checks-
+def run_quality_checks(df, table_name):
+    print(f"\n--- Data Quality Checks: {table_name} ---")
     
+    total_rows = df.count()
+    
+    # Check 1: No null transaction_ids
+    null_ids = df.filter(col("transaction_id").isNull()).count()
+    assert null_ids == 0, f"FAILED: {null_ids} null transaction_ids found"
+    print(f"No null transaction_ids ({total_rows} rows)")
+    
+    # Check 2: Amount must be positive
+    negative_amounts = df.filter(col("transaction_amount") <= 0).count()
+    assert negative_amounts == 0, f"FAILED: {negative_amounts} non-positive amounts"
+    print(f"All amounts positive")
+    
+    # Check 3: isFraud must be 0 or 1
+    invalid_fraud = df.filter(~col("is_fraud").isin([0, 1])).count()
+    assert invalid_fraud == 0, f"FAILED: {invalid_fraud} invalid isFraud values"
+    print(f"isFraud values valid (0 or 1 only)")
+    
+    # Check 4: Row count sanity check
+    assert total_rows > 1000, f"FAILED: Only {total_rows} rows — suspiciously low"
+    assert total_rows < 10_000_000, f"FAILED: {total_rows} rows — suspiciously high"
+    print(f"Row count within expected range: {total_rows}")
+    
+    print(f"All quality checks passed for {table_name}")
+
+# Execute quality gates before writing to storage
+run_quality_checks(fact_fraud_inference, "fact_fraud_inference")
 
 
 # --- Step E: Write to Silver as Delta Lake ---
 
-# we have explicitely overwritten the schema because delta lake detects the schema change because in our older
-# version we did not had is_data_consistency feature where as our new schema included this feature X.
 FACT_PATH = "s3a://fraud-detection-lake-nouman-v2/silver/fact_fraud_inference/"
 TIME_PATH = "s3a://fraud-detection-lake-nouman-v2/silver/dim_time/"
 USER_PATH = "s3a://fraud-detection-lake-nouman-v2/silver/dim_user/"
@@ -253,7 +285,7 @@ else:
     dim_time.write.format("delta").mode("overwrite").save(TIME_PATH)
 
 
-# # 3. Dim Merchant - SCD Type 1 (Upsert/Overwrite attributes)  - UPSERT
+# 3. Dim Merchant - SCD Type 1 (Upsert/Overwrite attributes)  - UPSERT
 print("Writing dim_merchant (SCD Type 1)...")
 if DeltaTable.isDeltaTable(spark, MERCHANT_PATH):
     delta_merchant = DeltaTable.forPath(spark, MERCHANT_PATH)
@@ -279,8 +311,6 @@ else:
     # SCD Type 2 Merge Strategy: Expire old rows and insert updated rows
     delta_user = DeltaTable.forPath(spark, USER_PATH)
     
-    # Identify updates where attributes changed
-    # (Simplified for pipeline flow: handles new entries & basic tracking updates)
     dim_user.createOrReplaceTempView("incoming_users")
     
     spark.sql(f"""

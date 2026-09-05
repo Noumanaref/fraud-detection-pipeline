@@ -24,6 +24,7 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:9093
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
 
   # ── Kafka UI ───────────────────────────────────────────────
   kafka-ui:
@@ -142,6 +143,20 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
       - grafana_data:/var/lib/grafana
+
+  kafka-setup:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - kafka
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "echo 'Waiting for Kafka to be ready...' &&
+      sleep 30 &&
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic raw_transactions --partitions 3 --replication-factor 1 --config retention.ms=604800000 &&
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic legacy_batch --partitions 3 --replication-factor 1 --config retention.ms=604800000 &&
+      echo 'Topics created successfully.' &&
+      kafka-topics --bootstrap-server kafka:9092 --list"
+    restart: "no"
 
 volumes:
   postgres_data:
