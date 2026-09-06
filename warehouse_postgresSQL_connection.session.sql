@@ -1,3 +1,8 @@
+SELECT *
+FROM fact_fraud_inference 
+LIMIT 5;
+
+
 -- 1. Dimension: User (SCD Type 2)
 CREATE TABLE IF NOT EXISTS dim_user (
     user_id VARCHAR(64) PRIMARY KEY,
@@ -65,3 +70,5 @@ CREATE TABLE IF NOT EXISTS fact_fraud_inference (
 );
 
 select * from fact_fraud_inference;
+
+
