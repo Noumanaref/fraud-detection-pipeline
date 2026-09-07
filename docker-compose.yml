@@ -85,6 +85,8 @@ services:
     user: root
     environment:
       - SPARK_MODE=master
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
     ports:
       - "8080:8080"
       - "7077:7077"
@@ -114,6 +116,7 @@ services:
   # ── Apache Airflow ─────────────────────────────────────────
   airflow:
     image: apache/airflow:2.8.0
+    user: "0:0"
     depends_on:
       - postgres
     environment:
@@ -122,11 +125,16 @@ services:
       AIRFLOW__CORE__FERNET_KEY: ''
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__WEBSERVER__SECRET_KEY: 'fraud_secret_key'
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     ports:
       - "8081:8080"
     volumes:
       - ./airflow/dags:/opt/airflow/dags
-      - airflow_logs:/opt/airflow/logs
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
     command: >
       bash -c "airflow db migrate &&
                airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true &&

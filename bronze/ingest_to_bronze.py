@@ -62,7 +62,7 @@ query1 = raw_transactions_df.writeStream \
     .option("path", f"{BRONZE_PATH}/raw_transactions") \
     .option("checkpointLocation", f"{CHECKPOINT_PATH}/raw_transactions") \
     .partitionBy("year", "month", "day") \
-    .trigger(processingTime="30 seconds") \
+    .trigger(availableNow=True) \
     .start()
 
 # --- 7. Write legacy_batch Stream to Bronze ---
@@ -74,8 +74,9 @@ query2 = legacy_batch_df.writeStream \
     .option("path", f"{BRONZE_PATH}/legacy_batch") \
     .option("checkpointLocation", f"{CHECKPOINT_PATH}/legacy_batch") \
     .partitionBy("year", "month", "day") \
-    .trigger(processingTime="30 seconds") \
+    .trigger(availableNow=True) \
     .start()
 
-# --- 8. Keep Both Streams Running ---
-spark.streams.awaitAnyTermination()
+# --- 8. Await termination of the micro-batches and exit ---
+query1.awaitTermination()
+query2.awaitTermination()

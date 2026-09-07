@@ -5,14 +5,30 @@ from delta import configure_spark_with_delta_pip
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType
 from pyspark.sql.functions import from_json, col, expr, to_timestamp, hour, dayofmonth, dayofweek, when, col
 from pyspark.sql.functions import sha2, concat_ws, lit, current_timestamp, coalesce
+import sys
+from datetime import datetime
 
 # Configuration && partition prunning
 # for now we will hard_code the partition prunning later airflow in M7 will pass this dynamically
 
-YEAR = 2026
-MONTH = 8
-DAY = 15
+# YEAR = 2026
+# MONTH = 8
+# DAY = 15
 
+## incremental processingm passing the date dynamically by using commandline arguments + pyython template
+
+# Airflow passes execution date as argument, default to today if running manually
+if len(sys.argv) > 1:
+    process_date = sys.argv[1]
+else:
+    process_date = datetime.now().strftime("%Y-%m-%d")
+
+year, month, day = process_date.split("-")
+YEAR = int(year)
+MONTH = int(month)
+DAY = int(day)
+
+print(f"Processing partition: {process_date}")
 
 BRONZE_RAW_TX_PATH = f"s3a://fraud-detection-lake-nouman-v2/bronze/raw_transactions/year={YEAR}/month={MONTH}/day={DAY}/"
 BRONZE_LEGACY_PATH = f"s3a://fraud-detection-lake-nouman-v2/bronze/legacy_batch/year={YEAR}/month={MONTH}/day={DAY}/"
