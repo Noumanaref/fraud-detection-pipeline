@@ -34,3 +34,4 @@ logs/
 aws/
 awscliv2.zip
 .vscode/
+*.bak
