@@ -59,7 +59,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Airflow
-        run: pip install --prefer-binary apache-airflow==2.8.0
+        run: pip install --prefer-binary apache-airflow==2.8.0 flask-session
 
       - name: Validate DAG syntax
         run: |
