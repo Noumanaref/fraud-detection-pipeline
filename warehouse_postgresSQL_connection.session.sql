@@ -1,6 +1,4 @@
-SELECT *
-FROM fact_fraud_inference 
-LIMIT 5;
+
 
 
 -- 1. Dimension: User (SCD Type 2)
