@@ -64,7 +64,7 @@ jobs:
       - name: Validate DAG syntax
         run: |
           export AIRFLOW__CORE__LOAD_EXAMPLES=False
-          aurflow db init
+          airflow db init
           airflow dags list
 
   deploy_notification:
