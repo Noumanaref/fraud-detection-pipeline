@@ -4,32 +4,41 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from delta import configure_spark_with_delta_pip
 
+
 def create_feature_store():
     # Initialize Spark Session with Delta Lake cluster support and wrapper
-    builder = SparkSession.builder \
-        .appName("GoldFeatureEngineering") \
-        .master("local[2]") \
-        .config("spark.jars.packages",
-                "io.delta:delta-spark_2.12:3.1.0,"
-                "org.apache.hadoop:hadoop-aws:3.3.4,"
-                "com.amazonaws:aws-java-sdk-bundle:1.12.262") \
-        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-        .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-        .config("spark.hadoop.fs.s3a.access.key", os.getenv("AWS_ACCESS_KEY_ID")) \
-        .config("spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY")) \
+    builder = (
+        SparkSession.builder.appName("GoldFeatureEngineering")
+        .master("local[2]")
+        .config(
+            "spark.jars.packages",
+            "io.delta:delta-spark_2.12:3.1.0,"
+            "org.apache.hadoop:hadoop-aws:3.3.4,"
+            "com.amazonaws:aws-java-sdk-bundle:1.12.262",
+        )
+        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+        .config(
+            "spark.sql.catalog.spark_catalog",
+            "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+        )
+        .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+        .config("spark.hadoop.fs.s3a.access.key", os.getenv("AWS_ACCESS_KEY_ID"))
+        .config("spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY"))
         .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com")
+    )
 
     spark = configure_spark_with_delta_pip(builder).getOrCreate()
 
     print("Spark Session initialized successfully with Delta & Cluster support!")
 
-    silver_fact_path = "s3a://fraud-detection-lake-nouman-v2/silver/fact_fraud_inference/"
+    silver_fact_path = (
+        "s3a://fraud-detection-lake-nouman-v2/silver/fact_fraud_inference/"
+    )
     silver_customer_path = "s3a://fraud-detection-lake-nouman-v2/silver/dim_user/"
 
     print(f"Reading Silver fact_transactions from: {silver_fact_path}")
     fact_df = spark.read.format("delta").load(silver_fact_path)
-    print("fact_df columns:", fact_df.columns) 
+    print("fact_df columns:", fact_df.columns)
 
     print(f"Reading Silver dim_customer from: {silver_customer_path}")
     customer_df = spark.read.format("delta").load(silver_customer_path)
@@ -38,25 +47,27 @@ def create_feature_store():
 
     print("Joining fact_transactions with dim_customer (using Broadcast Join)...")
 
-
-    feature_df = fact_df.join(F.broadcast(customer_df), fact_df.user_id == customer_df.user_id, "inner") \
-        .select(
-            fact_df.transaction_id,
-            fact_df.inference_timestamp.alias("timestamp"),
-            fact_df.user_id.alias("customer_id"),
-            fact_df.transaction_amount.alias("transaction_amount"),
-            fact_df.merchant_id,
-            fact_df.oldbalanceOrg,
-            fact_df.newbalanceOrig,
-            fact_df.is_fraud.alias("isFraud"),
-            fact_df.is_balance_fraud_signal,
-            lit(0).alias("is_data_inconsistency")
-        )
+    feature_df = fact_df.join(
+        F.broadcast(customer_df), fact_df.user_id == customer_df.user_id, "inner"
+    ).select(
+        fact_df.transaction_id,
+        fact_df.inference_timestamp.alias("timestamp"),
+        fact_df.user_id.alias("customer_id"),
+        fact_df.transaction_amount.alias("transaction_amount"),
+        fact_df.merchant_id,
+        fact_df.oldbalanceOrg,
+        fact_df.newbalanceOrig,
+        fact_df.is_fraud.alias("isFraud"),
+        fact_df.is_balance_fraud_signal,
+        lit(0).alias("is_data_inconsistency"),
+    )
 
     # Cast flags to integer
-    feature_df = feature_df \
-        .withColumn("is_balance_fraud_signal", F.col("is_balance_fraud_signal").cast("integer")) \
-        .withColumn("is_data_inconsistency", F.col("is_data_inconsistency").cast("integer"))
+    feature_df = feature_df.withColumn(
+        "is_balance_fraud_signal", F.col("is_balance_fraud_signal").cast("integer")
+    ).withColumn(
+        "is_data_inconsistency", F.col("is_data_inconsistency").cast("integer")
+    )
 
     print("\n--- Feature Engineering Preview ---")
     feature_df.printSchema()
@@ -65,14 +76,13 @@ def create_feature_store():
     gold_output_path = "s3a://fraud-detection-lake-nouman-v2/gold/ml_features/"
     print(f"Writing processed ML features to Gold layer: {gold_output_path}")
 
-    feature_df.write \
-        .format("delta") \
-        .mode("overwrite") \
-        .option("overwriteSchema", "true") \
-        .save(gold_output_path)
+    feature_df.write.format("delta").mode("overwrite").option(
+        "overwriteSchema", "true"
+    ).save(gold_output_path)
 
     print("Feature Engineering complete and saved to Gold layer!")
     spark.stop()
+
 
 if __name__ == "__main__":
     create_feature_store()

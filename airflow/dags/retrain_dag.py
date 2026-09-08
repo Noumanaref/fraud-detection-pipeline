@@ -38,7 +38,7 @@ with DAG(
     description="Weekly model retraining and evaluation pipeline",
     schedule_interval="0 2 * * 0",
     start_date=datetime(2026, 9, 1),
-    max_active_runs = 1,
+    max_active_runs=1,
     catchup=False,
     tags=["fraud", "mlops", "retraining"],
 ) as dag:
@@ -57,7 +57,7 @@ with DAG(
             "AWS_ACCESS_KEY_ID": "{{ var.value.aws_access_key_id }}",
             "AWS_SECRET_ACCESS_KEY": "{{ var.value.aws_secret_access_key }}",
             "DB_PASSWORD": "{{ var.value.db_password }}",
-        }
+        },
     )
 
     # Task 3: Train New Model
@@ -69,7 +69,7 @@ with DAG(
             "AWS_SECRET_ACCESS_KEY": "{{ var.value.aws_secret_access_key }}",
             "MLFLOW_TRACKING_URI": "http://mlflow:5000",
             "DB_PASSWORD": "{{ var.value.db_password }}",
-        }
+        },
     )
 
     # Task 4: Evaluate and Promote
@@ -81,7 +81,7 @@ with DAG(
             "AWS_SECRET_ACCESS_KEY": "{{ var.value.aws_secret_access_key }}",
             "MLFLOW_TRACKING_URI": "http://mlflow:5000",
             "DB_PASSWORD": "{{ var.value.db_password }}",
-        }
+        },
     )
 
     # Task 5: Notify Result
@@ -91,4 +91,10 @@ with DAG(
     )
 
     # Sequence dependencies: 1 → 2 → 3 → 4 → 5
-    fetch_training_data >> run_feature_engineering >> train_new_model >> evaluate_and_promote >> notify_result
+    (
+        fetch_training_data
+        >> run_feature_engineering
+        >> train_new_model
+        >> evaluate_and_promote
+        >> notify_result
+    )

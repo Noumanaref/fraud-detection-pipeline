@@ -34,7 +34,7 @@ SPARK_SUBMIT = (
 
 SPARK_SUBMIT_PG = SPARK_SUBMIT.replace(
     "aws-java-sdk-bundle:1.12.262'",
-    "aws-java-sdk-bundle:1.12.262,org.postgresql:postgresql:42.5.4'"
+    "aws-java-sdk-bundle:1.12.262,org.postgresql:postgresql:42.5.4'",
 )
 
 with DAG(
@@ -43,7 +43,7 @@ with DAG(
     description="Main real-time fraud pipeline running every 15 minutes",
     schedule_interval="*/15 * * * *",
     start_date=datetime(2026, 9, 1),
-    max_active_runs = 1,
+    max_active_runs=1,
     catchup=False,
     tags=["fraud", "pipeline", "frequent"],
 ) as dag:
@@ -67,7 +67,7 @@ with DAG(
             "AWS_ACCESS_KEY_ID": "{{ var.value.aws_access_key_id }}",
             "AWS_SECRET_ACCESS_KEY": "{{ var.value.aws_secret_access_key }}",
             "DB_PASSWORD": "{{ var.value.db_password }}",
-        }
+        },
     )
 
     # Task 3: Silver Transformation
@@ -78,7 +78,7 @@ with DAG(
             "AWS_ACCESS_KEY_ID": "{{ var.value.aws_access_key_id }}",
             "AWS_SECRET_ACCESS_KEY": "{{ var.value.aws_secret_access_key }}",
             "DB_PASSWORD": "{{ var.value.db_password }}",
-        }
+        },
     )
 
     # Task 4: Gold Inference
@@ -89,7 +89,7 @@ with DAG(
             "AWS_ACCESS_KEY_ID": "{{ var.value.aws_access_key_id }}",
             "AWS_SECRET_ACCESS_KEY": "{{ var.value.aws_secret_access_key }}",
             "DB_PASSWORD": "{{ var.value.db_password }}",
-        }
+        },
     )
 
     # Task 5: Completion Alert
@@ -98,12 +98,18 @@ with DAG(
         bash_command=(
             "curl -s -X POST $SLACK_WEBHOOK_URL "
             "-H 'Content-type: application/json' "
-            "--data '{\"text\": \"Pipeline run complete for {{ ds }}\"}' || "
+            '--data \'{"text": "Pipeline run complete for {{ ds }}"}\' || '
             "echo 'Pipeline complete {{ ds }}'"
         ),
         env={
             "SLACK_WEBHOOK_URL": "{{ var.value.slack_webhook_url }}",
-        }
+        },
     )
 
-    check_kafka_lag >> run_bronze_ingestion >> run_silver_transform >> run_gold_inference >> send_completion_alert
+    (
+        check_kafka_lag
+        >> run_bronze_ingestion
+        >> run_silver_transform
+        >> run_gold_inference
+        >> send_completion_alert
+    )
