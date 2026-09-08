@@ -38,6 +38,7 @@ with DAG(
     description="Weekly model retraining and evaluation pipeline",
     schedule_interval="0 2 * * 0",
     start_date=datetime(2026, 9, 1),
+    max_active_runs = 1,
     catchup=False,
     tags=["fraud", "mlops", "retraining"],
 ) as dag:

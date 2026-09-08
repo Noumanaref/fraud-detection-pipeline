@@ -43,6 +43,7 @@ with DAG(
     description="Main real-time fraud pipeline running every 15 minutes",
     schedule_interval="*/15 * * * *",
     start_date=datetime(2026, 9, 1),
+    max_active_runs = 1,
     catchup=False,
     tags=["fraud", "pipeline", "frequent"],
 ) as dag:

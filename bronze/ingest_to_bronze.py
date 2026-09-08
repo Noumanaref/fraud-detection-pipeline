@@ -3,7 +3,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import year, month, dayofmonth, col
 
 # --- 1. Configuration ---
-KAFKA_BROKER = "localhost:9093"
+KAFKA_BROKER = "kafka:9092"
 KAFKA_TOPICS = "raw_transactions,legacy_batch"
 
 BRONZE_BUCKET = "s3a://fraud-detection-lake-nouman-v2"
