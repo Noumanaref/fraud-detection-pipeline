@@ -33,7 +33,7 @@ def safe_cast(val, to_type):
         return None
 
 
-# Slack Alerts configurations
+# Slack Alerts configurations (Optimized to fetch directly from Postgres or localized Spark top-k)
 def send_slack_alerts(high_risk_pdf):
     webhook_url = os.getenv("SLACK_WEBHOOK_URL")
     if not webhook_url:
@@ -47,7 +47,10 @@ def send_slack_alerts(high_risk_pdf):
     print(f"Sending {len(high_risk_pdf)} Slack alerts...")
 
     for _, row in high_risk_pdf.iterrows():
-        message = f"FRAUD ALERT: Transaction {row['transaction_id'][:8]}... | Amount: ${row['transaction_amount']:.2f} | Score: {row['xgboost_probability']:.4f}"
+        # Handle case where transaction_id might be a string or byte
+        tx_id_str = str(row['transaction_id'])
+        short_id = tx_id_str[:8] if len(tx_id_str) >= 8 else tx_id_str
+        message = f"FRAUD ALERT: Transaction {short_id}... | Amount: ${row['transaction_amount']:.2f} | Score: {row['xgboost_probability']:.4f}"
         try:
             response = requests.post(
                 webhook_url,
@@ -73,7 +76,7 @@ def sync_dim_users_to_postgres(spark):
         "driver": "org.postgresql.Driver",
     }
 
-    user_df.write.mode("overwrite").option("batchsize", "10000").jdbc(
+    user_df.repartition(4).write.mode("overwrite").option("batchsize", "10000").jdbc(
         db_url, "dim_user_staging", properties=db_properties
     )
 
@@ -115,7 +118,7 @@ def sync_dim_merchants_to_postgres(spark):
         "driver": "org.postgresql.Driver",
     }
 
-    merchant_df.write.mode("overwrite").option("batchsize", "10000").jdbc(
+    merchant_df.repartition(4).write.mode("overwrite").option("batchsize", "10000").jdbc(
         db_url, "dim_merchant_staging", properties=db_properties
     )
 
@@ -157,7 +160,7 @@ def sync_dim_time_to_postgres(spark):
         "driver": "org.postgresql.Driver",
     }
 
-    time_df.write.mode("overwrite").option("batchsize", "10000").jdbc(
+    time_df.repartition(4).write.mode("overwrite").option("batchsize", "10000").jdbc(
         db_url, "dim_time_staging", properties=db_properties
     )
 
@@ -178,7 +181,7 @@ def sync_dim_time_to_postgres(spark):
     print("Time dimensions synchronized successfully.")
 
 
-# fetch dim_model metadata & UPSERTS into dim_model from MLflow
+# Fetch dim_model metadata & UPSERTS into dim_model from MLflow
 def populate_dim_model(client, model_version_obj, run_id):
     print("Populating dim_model from MLflow registry...")
 
@@ -240,7 +243,8 @@ def upsert_to_postgres(scored_spark_df, spark):
         "driver": "org.postgresql.Driver",
     }
 
-    scored_spark_df.write.mode("overwrite").option("batchsize", "10000").jdbc(
+    # Repartition to 8 balanced partitions to optimize parallel JDBC batch writing
+    scored_spark_df.repartition(8).write.mode("overwrite").option("batchsize", "10000").jdbc(
         db_url, "fact_fraud_inference_staging", properties=db_properties
     )
 
@@ -312,6 +316,10 @@ def run_batch_inference():
     builder = (
         SparkSession.builder.appName("GoldBatchInferenceDistributed")
         .master("local[*]")
+        .config("spark.driver.memory", "6g")
+        .config("spark.sql.shuffle.partitions", "8")
+        .config("spark.sql.adaptive.enabled", "true")
+        .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
         .config(
             "spark.jars.packages",
             "io.delta:delta-spark_2.12:3.1.0,"
@@ -403,12 +411,21 @@ def run_batch_inference():
     print("\n[5/5] Upserting to PostgreSQL fact_fraud_inference...")
     upsert_to_postgres(final_scored_spark_df, spark)
 
-    high_risk_pdf = (
-        final_scored_spark_df.filter(col("xgboost_probability") > 0.9)
-        .orderBy(col("xgboost_probability").desc())
-        .limit(10)
-        .toPandas()
-    )
+    # OPTIMIZED ALERTING: Query top high-risk rows directly from PostgreSQL instead of a heavy Spark global sort
+    print("Fetching high-risk transactions for Slack alerts from database...")
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        high_risk_pdf = pd.read_sql("""
+            SELECT transaction_id, transaction_amount, xgboost_probability 
+            FROM fact_fraud_inference 
+            WHERE xgboost_probability > 0.9 
+            ORDER BY xgboost_probability DESC 
+            LIMIT 10;
+        """, conn)
+        conn.close()
+    except Exception as e:
+        print(f"Database query for alerts failed: {e}")
+        high_risk_pdf = pd.DataFrame()
 
     send_slack_alerts(high_risk_pdf)
 

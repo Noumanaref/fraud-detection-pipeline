@@ -1,14 +1,14 @@
-# this is standard librray to interact with OS, access enviornment variables like (AWS credentials, mlflow URL)
+# This is standard library to interact with OS, access environment variables (AWS credentials, mlflow URL)
 import os
 
 # tempfile will create secure, temporary directories in our local machine and will automatically discard it when done.
 import tempfile
 
-# mlflow library for tracking experiements, managing runs and logging OR fetching artifacts.
+# MLflow library for tracking experiments, managing runs, and logging/fetching artifacts.
 import mlflow
 import xgboost as xgb
 
-# mlflow client : A low-level Python API client for MLflow that allows querying experiments,
+# MLflow client: A low-level Python API client for MLflow that allows querying experiments,
 # searching runs, downloading raw artifacts, and controlling the Model Registry (e.g., promoting models to "Production").
 from mlflow.tracking import MlflowClient
 from pyspark.sql import SparkSession
@@ -17,17 +17,21 @@ from pyspark.sql import SparkSession
 from delta import configure_spark_with_delta_pip
 from sklearn.metrics import precision_score, recall_score, f1_score, confusion_matrix
 
-# configuration and initialization
-# This basically tells the mlflow client where the mlflow server is located
+# Configuration and initialization
+# This tells the MLflow client where the MLflow server is located
 # Checks if the environment variable MLFLOW_TRACKING_URI exists; if not, falls back to http://mlflow:5000.
 mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
 
 
-# initialize the Spark Session
+# Initialize the optimized Spark Session matching pipeline standards
 def evaluate_and_promote_model():
     builder = (
         SparkSession.builder.appName("FraudModelEvaluation")
-        .master("local[2]")
+        .master("local[*]")
+        .config("spark.driver.memory", "6g")
+        .config("spark.sql.shuffle.partitions", "8")
+        .config("spark.sql.adaptive.enabled", "true")
+        .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
         .config(
             "spark.jars.packages",
             "io.delta:delta-spark_2.12:3.1.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262",
@@ -44,18 +48,12 @@ def evaluate_and_promote_model():
     )
 
     spark = configure_spark_with_delta_pip(builder).getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
 
-    # APPname : basically names the spark application (FraudModelEvaluation) for monitoring and logging purposes.
-    # master("local[2]") : configure the spark to run locally with 2 CPU threads. This is useful for development and testing.
-    # configure_spark_with_delta_pip(builder).getOrCreate(): Merges Delta dependencies into the builder and spins up the Spark session.
-
-    # STEP _ 2: Fetching and splitting feature data
+    # STEP 2: Fetching and projecting feature data safely
     print("Fetching Gold features for evaluation...")
     gold_feature_path = "s3a://fraud-detection-lake-nouman-v2/gold/ml_features/"
     feature_df = spark.read.format("delta").load(gold_feature_path)
-
-    pdf = feature_df.toPandas()
-    pdf = pdf.sort_values("timestamp").reset_index(drop=True)
 
     feature_cols = [
         "transaction_amount",
@@ -65,6 +63,14 @@ def evaluate_and_promote_model():
     ]
     target_col = "isFraud"
 
+    # Optimize memory usage by projecting only required columns before pulling to Pandas
+    print("Selecting required feature columns...")
+    optimized_df = feature_df.select(["timestamp"] + feature_cols + [target_col])
+
+    print("Converting feature DataFrame to Pandas...")
+    pdf = optimized_df.toPandas()
+    pdf = pdf.sort_values("timestamp").reset_index(drop=True)
+
     X = pdf[feature_cols]
     y = pdf[target_col]
 
@@ -72,7 +78,7 @@ def evaluate_and_promote_model():
     X_test = X.iloc[split_index:]
     y_test = y.iloc[split_index:]
 
-    # STEP _ 3: Finding the Latest MLflow Run
+    # STEP 3: Finding the Latest MLflow Run
     client = MlflowClient()
     experiment_name = "fraud_detection_xgboost_v2"
 
@@ -82,6 +88,7 @@ def evaluate_and_promote_model():
     experiment = client.get_experiment_by_name(experiment_name)
     if not experiment:
         print(f"Error: Experiment '{experiment_name}' not found.")
+        spark.stop()
         return
 
     runs = client.search_runs(
@@ -94,7 +101,7 @@ def evaluate_and_promote_model():
     auc_score = latest_run.data.metrics.get("auc", 0)
     print(f"\nLoaded Run ID: {run_id} | Logged AUC: {auc_score:.4f}")
 
-    # STEP _ 4: Downloading the Model Artifact
+    # STEP 4: Downloading the Model Artifact
     model = xgb.XGBClassifier()
     with tempfile.TemporaryDirectory() as tmp_dir:
         print("Downloading model artifact from MLflow...")
@@ -102,7 +109,7 @@ def evaluate_and_promote_model():
         local_model_path = os.path.join(tmp_dir, artifact_path, "model.json")
         model.load_model(local_model_path)
 
-    # STEP _ 5: Evaluating the Model
+    # STEP 5: Evaluating the Model
     y_pred = model.predict(X_test)
     precision = precision_score(y_test, y_pred)
     recall = recall_score(y_test, y_pred)
@@ -115,7 +122,7 @@ def evaluate_and_promote_model():
     print(f"F1 Score:  {f1:.4f}")
     print(f"Confusion Matrix:\n{cm}")
 
-    # STEP _ 6: Model Promotion Logic
+    # STEP 6: Model Promotion Logic
     if auc_score > 0.85:
         print("\nModel meets the 0.85 AUC threshold. Registering to Model Registry...")
 
@@ -132,6 +139,7 @@ def evaluate_and_promote_model():
         print("Success! Model is ready for the Gold layer inference pipeline.")
     else:
         print("\nModel rejected. AUC is below the 0.85 threshold. Tuning required.")
+        
     spark.stop()
 
 

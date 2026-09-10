@@ -6,10 +6,14 @@ from delta import configure_spark_with_delta_pip
 
 
 def create_feature_store():
-    # Initialize Spark Session with Delta Lake cluster support and wrapper
+    # Initialize Spark Session with optimized cluster parameters matching Silver layer
     builder = (
         SparkSession.builder.appName("GoldFeatureEngineering")
-        .master("local[2]")
+        .master("local[*]")
+        .config("spark.driver.memory", "6g")
+        .config("spark.sql.shuffle.partitions", "8")
+        .config("spark.sql.adaptive.enabled", "true")
+        .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
         .config(
             "spark.jars.packages",
             "io.delta:delta-spark_2.12:3.1.0,"
@@ -28,8 +32,11 @@ def create_feature_store():
     )
 
     spark = configure_spark_with_delta_pip(builder).getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
 
-    print("Spark Session initialized successfully with Delta & Cluster support!")
+    print(
+        "Spark Session initialized successfully with optimized Delta & Cluster support!"
+    )
 
     silver_fact_path = (
         "s3a://fraud-detection-lake-nouman-v2/silver/fact_fraud_inference/"
@@ -38,29 +45,31 @@ def create_feature_store():
 
     print(f"Reading Silver fact_transactions from: {silver_fact_path}")
     fact_df = spark.read.format("delta").load(silver_fact_path)
-    print("fact_df columns:", fact_df.columns)
 
     print(f"Reading Silver dim_customer from: {silver_customer_path}")
     customer_df = spark.read.format("delta").load(silver_customer_path)
 
-    print("Columns available in fact_df:", fact_df.columns)
-
-    print("Joining fact_transactions with dim_customer (using Broadcast Join)...")
-
-    feature_df = fact_df.join(
-        F.broadcast(customer_df), fact_df.user_id == customer_df.user_id, "inner"
-    ).select(
-        fact_df.transaction_id,
-        fact_df.inference_timestamp.alias("timestamp"),
-        fact_df.user_id.alias("customer_id"),
-        fact_df.transaction_amount.alias("transaction_amount"),
-        fact_df.merchant_id,
-        fact_df.oldbalanceOrg,
-        fact_df.newbalanceOrig,
-        fact_df.is_fraud.alias("isFraud"),
-        fact_df.is_balance_fraud_signal,
-        lit(0).alias("is_data_inconsistency"),
+    print(
+        "Joining fact_transactions with dim_customer (Standard Sort-Merge Join)..."
     )
+
+    # Removed unsafe broadcast on 3.5M row dimension table; using standard inner join
+    feature_df = (
+        fact_df.join(customer_df, fact_df.user_id == customer_df.user_id, "inner")
+        .select(
+            fact_df.transaction_id,
+            fact_df.inference_timestamp.alias("timestamp"),
+            fact_df.user_id.alias("customer_id"),
+            fact_df.transaction_amount.alias("transaction_amount"),
+            fact_df.merchant_id,
+            fact_df.oldbalanceOrg,
+            fact_df.newbalanceOrig,
+            fact_df.is_fraud.alias("isFraud"),
+            fact_df.is_balance_fraud_signal,
+            lit(0).alias("is_data_inconsistency"),
+        )
+        .repartition(8)
+    )  # Ensure balanced output file distribution in Gold storage
 
     # Cast flags to integer
     feature_df = feature_df.withColumn(

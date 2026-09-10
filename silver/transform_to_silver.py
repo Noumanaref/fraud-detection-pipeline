@@ -27,33 +27,41 @@ from datetime import datetime
 # Configuration && partition prunning
 # for now we will hard_code the partition prunning later airflow in M7 will pass this dynamically
 
-# YEAR = 2026
-# MONTH = 8
-# DAY = 15
+YEAR = 2026
+MONTH = 8
+DAY = 15
 
 ## incremental processingm passing the date dynamically by using commandline arguments + pyython template
 
 # Airflow passes execution date as argument, default to today if running manually
-if len(sys.argv) > 1:
-    process_date = sys.argv[1]
-else:
-    process_date = datetime.now().strftime("%Y-%m-%d")
+# if len(sys.argv) > 1:
+#     process_date = sys.argv[1]
+# else:
+#     process_date = "2026-09-09"
 
-year, month, day = process_date.split("-")
-YEAR = int(year)
-MONTH = int(month)
-DAY = int(day)
+# year, month, day = process_date.split("-")
+# YEAR = int(year)
+# MONTH = int(month)
+# DAY = int(day)
 
-print(f"Processing partition: {process_date}")
+# print(f"Processing partition: {process_date}")
 
-BRONZE_RAW_TX_PATH = f"s3a://fraud-detection-lake-nouman-v2/bronze/raw_transactions/year={YEAR}/month={MONTH}/day={DAY}/"
-BRONZE_LEGACY_PATH = f"s3a://fraud-detection-lake-nouman-v2/bronze/legacy_batch/year={YEAR}/month={MONTH}/day={DAY}/"
+# BRONZE_RAW_TX_PATH = f"s3a://fraud-detection-lake-nouman-v2/bronze/raw_transactions/year={YEAR}/month={MONTH}/day={DAY}/"
+BRONZE_RAW_TX_PATH = f"s3a://fraud-detection-lake-nouman-v2/bronze/raw_transactions/"
+
+
+# BRONZE_LEGACY_PATH = f"s3a://fraud-detection-lake-nouman-v2/bronze/legacy_batch/year={YEAR}/month={MONTH}/day={DAY}/"
+BRONZE_LEGACY_PATH = f"s3a://fraud-detection-lake-nouman-v2/bronze/legacy_batch/"
 
 
 # initialize sparkSession with delta-lake
 builder = (
     SparkSession.builder.appName("SilverTransformation")
-    .master("local[2]")
+    .master("local[*]")
+    .config("spark.driver.memory", "6g")
+    .config("spark.sql.shuffle.partitions", "8")  # reduce default 200 shuffle partitions to 8 — for small cluster
+    .config("spark.sql.adaptive.enabled", "true")  # let Spark auto-optimize joins
+    .config("spark.sql.adaptive.coalescePartitions.enabled", "true")  # merge small partitions
     .config(
         "spark.jars.packages",
         "io.delta:delta-spark_2.12:3.1.0,"
@@ -83,15 +91,6 @@ raw_tx_df = spark.read.parquet(BRONZE_RAW_TX_PATH)
 
 print(f"Reading legacy_batch from: {BRONZE_LEGACY_PATH}")
 legacy_df = spark.read.parquet(BRONZE_LEGACY_PATH)
-
-# --- Verification ---
-print("\n--- Raw Transactions ---")
-raw_tx_df.printSchema()
-print(f"Row count: {raw_tx_df.count()}")
-
-print("\n--- Legacy Batch ---")
-legacy_df.printSchema()
-print(f"Row count: {legacy_df.count()}")
 
 
 # Step B : lets parse JSON and standardize schema
@@ -168,11 +167,9 @@ std_legacy_df = (
 # lets unify the schema.
 unified_df = std_tx_df.unionByName(std_legacy_df, allowMissingColumns=True)
 
-print("\n--- Unified Schema ---")
-unified_df.printSchema()
 
 
-# Step C : DataCleaning and feature flags
+# Step C : DataCleaning and feature flags & caching to prevent from re-scans from disk
 
 print("\n--- Step C: Cleaning Data & Adding Fraud Flags ---")
 
@@ -183,22 +180,22 @@ cleaned_df = unified_df.dropDuplicates(["transaction_id"])
 # Fill missing isFlaggedFraud with 0, then drop rows missing critical keys
 
 cleaned_df = cleaned_df.fillna({"isFlaggedFraud": 0})
-cleaned_df = cleaned_df.dropna(subset=["transaction_id", "isFraud"])
+cleaned_df = cleaned_df.filter(col("amount") > 0).dropna(
+    subset=["transaction_id", "isFraud", "amount"]
+)
 
 ## Add rule based fraud flags
 # Use expr() to evaluate boolean logic conditions natively
 
-silver_df = cleaned_df.withColumn(
+silver_df = (cleaned_df.withColumn(
     "is_balance_fraud_signal", expr("newbalanceOrig == 0 AND amount > 10000")
 ).withColumn("is_data_inconsistency", expr("isFlaggedFraud != isFraud"))
-
+.cache()
+)
 
 # --- Verification ---
-print("\n--- Cleaned Silver Data Preview ---")
-print(f"Row count after cleaning: {silver_df.count()}")
-silver_df.select("transaction_id", "amount", "is_balance_fraud_signal").show(
-    5, truncate=False
-)
+total_rows = silver_df.count()
+print(f"Row count after cleaning : {total_rows}")
 
 
 # step D : Lets build star_schema where we have transactions as fact_table
@@ -274,14 +271,8 @@ fact_fraud_inference = (
         lit(0.0).alias("inference_latency_ms"),
         col("timestamp").alias("inference_timestamp"),
     )
+    .repartition(8)
 )
-
-
-print("\n--- Star Schema Row Counts ---")
-print(f"fact_fraud_inference rows: {fact_fraud_inference.count()}")
-print(f"dim_time rows: {dim_time.count()}")
-print(f"dim_user rows: {dim_user.count()}")
-print(f"dim_merchant rows: {dim_merchant.count()}")
 
 
 print("\n--- Spark Execution Plan for fact_fraud_inference ---")
@@ -395,5 +386,5 @@ else:
         "target.user_id = source.user_id AND target.is_current = true",
     ).whenNotMatchedInsertAll().execute()
 
-
+silver_df.unpersist()
 print("--- Silver Transformation & Star Schema S3 Loading Complete! ---")

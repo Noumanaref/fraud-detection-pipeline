@@ -1,7 +1,7 @@
 import os
 import mlflow
 import mlflow.xgboost
-import tempfile  ## temporary directory - thhis is python's built in module. it will create folder and will auto delte when done.
+import tempfile
 import xgboost as xgb
 from pyspark.sql import SparkSession
 from delta import configure_spark_with_delta_pip
@@ -12,10 +12,14 @@ mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
 
 
 def train_fraud_model():
-    # 1. Initialize Spark Session with Delta Lake and Cluster support
+    # 1. Initialize Spark Session with optimized cluster settings matching Silver/Gold pipelines
     builder = (
         SparkSession.builder.appName("FraudModelTraining")
-        .master("local[2]")
+        .master("local[*]")
+        .config("spark.driver.memory", "6g")
+        .config("spark.sql.shuffle.partitions", "8")
+        .config("spark.sql.adaptive.enabled", "true")
+        .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
         .config(
             "spark.jars.packages",
             "io.delta:delta-spark_2.12:3.1.0,"
@@ -34,21 +38,16 @@ def train_fraud_model():
     )
 
     spark = configure_spark_with_delta_pip(builder).getOrCreate()
-    print("Spark Session initialized successfully for Model Training!")
+    spark.sparkContext.setLogLevel("WARN")
+    print("Spark Session initialized successfully with optimized cluster support!")
 
     # 2. Read the Gold Layer Feature Store Table from S3
     gold_feature_path = "s3a://fraud-detection-lake-nouman-v2/gold/ml_features/"
     print(f"Reading Gold features from: {gold_feature_path}")
     feature_df = spark.read.format("delta").load(gold_feature_path)
 
-    # 3. Convert Spark DataFrame to Pandas for XGBoost training
-    print("Converting feature DataFrame to Pandas...")
-    pdf = feature_df.toPandas()
-
-    # Sort data by timestamp to ensure a correct time-based split
-    pdf = pdf.sort_values("timestamp").reset_index(drop=True)
-
-    # 4. Define feature columns and target label
+    # 3. Optimize memory before converting to Pandas by selecting only required columns
+    print("Selecting model features and casting to optimal types...")
     feature_cols = [
         "transaction_amount",
         "oldbalanceOrg",
@@ -56,6 +55,19 @@ def train_fraud_model():
         "is_balance_fraud_signal",
     ]
     target_col = "isFraud"
+
+    # Drop unnecessary heavy string columns (like transaction_id, customer_id, merchant_id) 
+    # before calling toPandas() to prevent driver OOM memory saturation.
+    optimized_df = feature_df.select(["timestamp"] + feature_cols + [target_col])
+
+    print("Converting optimized feature DataFrame to Pandas...")
+    pdf = optimized_df.toPandas()
+
+    # Sort data by timestamp to ensure a correct time-based split
+    pdf = pdf.sort_values("timestamp").reset_index(drop=True)
+    
+    # Drop timestamp column now that sorting is complete so it's not passed to XGBoost
+    pdf = pdf.drop(columns=["timestamp"])
 
     X = pdf[feature_cols]
     y = pdf[target_col]
@@ -78,13 +90,13 @@ def train_fraud_model():
         "scale_pos_weight": 773,  # Fix for the 773:1 class imbalance ratio
         "eval_metric": "logloss",
         "random_state": 42,
+        "n_jobs": -1,  # Utilize all available CPU cores for XGBoost fitting
     }
 
     print("Training XGBoost Classifier...")
     model = xgb.XGBClassifier(**params)
 
     with mlflow.start_run() as run:
-
         mlflow.log_params(params)
 
         # Train
@@ -108,6 +120,7 @@ def train_fraud_model():
 
         print(f"Run ID: {run.info.run_id}")
         print(f"AUC: {auc:.4f} | Precision: {precision:.4f}")
+        
     mlflow.register_model(
         model_uri=f"runs:/{run.info.run_id}/xgboost_fraud_model",
         name="fraud_detection_xgboost",
