@@ -139,7 +139,7 @@ def evaluate_and_promote_model():
         print("Success! Model is ready for the Gold layer inference pipeline.")
     else:
         print("\nModel rejected. AUC is below the 0.85 threshold. Tuning required.")
-        
+
     spark.stop()
 
 

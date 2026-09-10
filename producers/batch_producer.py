@@ -9,8 +9,8 @@ CSV_PATH = "data/PS_20174392719_1491204439457_log.csv"
 producer = KafkaProducer(
     bootstrap_servers=["localhost:9093"],
     value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-    batch_size=65536,          # Increased batch size (64KB)
-    linger_ms=20,              # Allow slightly longer accumulation for larger batches
+    batch_size=65536,  # Increased batch size (64KB)
+    linger_ms=20,  # Allow slightly longer accumulation for larger batches
     # buffer_memory=67108864     # 64MB buffer to prevent blocking on fast loops
 )
 

@@ -48,7 +48,7 @@ def send_slack_alerts(high_risk_pdf):
 
     for _, row in high_risk_pdf.iterrows():
         # Handle case where transaction_id might be a string or byte
-        tx_id_str = str(row['transaction_id'])
+        tx_id_str = str(row["transaction_id"])
         short_id = tx_id_str[:8] if len(tx_id_str) >= 8 else tx_id_str
         message = f"FRAUD ALERT: Transaction {short_id}... | Amount: ${row['transaction_amount']:.2f} | Score: {row['xgboost_probability']:.4f}"
         try:
@@ -118,9 +118,9 @@ def sync_dim_merchants_to_postgres(spark):
         "driver": "org.postgresql.Driver",
     }
 
-    merchant_df.repartition(4).write.mode("overwrite").option("batchsize", "10000").jdbc(
-        db_url, "dim_merchant_staging", properties=db_properties
-    )
+    merchant_df.repartition(4).write.mode("overwrite").option(
+        "batchsize", "10000"
+    ).jdbc(db_url, "dim_merchant_staging", properties=db_properties)
 
     conn = psycopg2.connect(**DB_CONFIG)
     cursor = conn.cursor()
@@ -244,9 +244,9 @@ def upsert_to_postgres(scored_spark_df, spark):
     }
 
     # Repartition to 8 balanced partitions to optimize parallel JDBC batch writing
-    scored_spark_df.repartition(8).write.mode("overwrite").option("batchsize", "10000").jdbc(
-        db_url, "fact_fraud_inference_staging", properties=db_properties
-    )
+    scored_spark_df.repartition(8).write.mode("overwrite").option(
+        "batchsize", "10000"
+    ).jdbc(db_url, "fact_fraud_inference_staging", properties=db_properties)
 
     print("Staging table written.")
 
@@ -415,13 +415,16 @@ def run_batch_inference():
     print("Fetching high-risk transactions for Slack alerts from database...")
     try:
         conn = psycopg2.connect(**DB_CONFIG)
-        high_risk_pdf = pd.read_sql("""
+        high_risk_pdf = pd.read_sql(
+            """
             SELECT transaction_id, transaction_amount, xgboost_probability 
             FROM fact_fraud_inference 
             WHERE xgboost_probability > 0.9 
             ORDER BY xgboost_probability DESC 
             LIMIT 10;
-        """, conn)
+        """,
+            conn,
+        )
         conn.close()
     except Exception as e:
         print(f"Database query for alerts failed: {e}")

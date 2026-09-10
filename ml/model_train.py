@@ -56,7 +56,7 @@ def train_fraud_model():
     ]
     target_col = "isFraud"
 
-    # Drop unnecessary heavy string columns (like transaction_id, customer_id, merchant_id) 
+    # Drop unnecessary heavy string columns (like transaction_id, customer_id, merchant_id)
     # before calling toPandas() to prevent driver OOM memory saturation.
     optimized_df = feature_df.select(["timestamp"] + feature_cols + [target_col])
 
@@ -65,7 +65,7 @@ def train_fraud_model():
 
     # Sort data by timestamp to ensure a correct time-based split
     pdf = pdf.sort_values("timestamp").reset_index(drop=True)
-    
+
     # Drop timestamp column now that sorting is complete so it's not passed to XGBoost
     pdf = pdf.drop(columns=["timestamp"])
 
@@ -120,7 +120,7 @@ def train_fraud_model():
 
         print(f"Run ID: {run.info.run_id}")
         print(f"AUC: {auc:.4f} | Precision: {precision:.4f}")
-        
+
     mlflow.register_model(
         model_uri=f"runs:/{run.info.run_id}/xgboost_fraud_model",
         name="fraud_detection_xgboost",

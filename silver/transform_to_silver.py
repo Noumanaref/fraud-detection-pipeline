@@ -59,9 +59,13 @@ builder = (
     SparkSession.builder.appName("SilverTransformation")
     .master("local[*]")
     .config("spark.driver.memory", "6g")
-    .config("spark.sql.shuffle.partitions", "8")  # reduce default 200 shuffle partitions to 8 — for small cluster
+    .config(
+        "spark.sql.shuffle.partitions", "8"
+    )  # reduce default 200 shuffle partitions to 8 — for small cluster
     .config("spark.sql.adaptive.enabled", "true")  # let Spark auto-optimize joins
-    .config("spark.sql.adaptive.coalescePartitions.enabled", "true")  # merge small partitions
+    .config(
+        "spark.sql.adaptive.coalescePartitions.enabled", "true"
+    )  # merge small partitions
     .config(
         "spark.jars.packages",
         "io.delta:delta-spark_2.12:3.1.0,"
@@ -168,7 +172,6 @@ std_legacy_df = (
 unified_df = std_tx_df.unionByName(std_legacy_df, allowMissingColumns=True)
 
 
-
 # Step C : DataCleaning and feature flags & caching to prevent from re-scans from disk
 
 print("\n--- Step C: Cleaning Data & Adding Fraud Flags ---")
@@ -187,10 +190,12 @@ cleaned_df = cleaned_df.filter(col("amount") > 0).dropna(
 ## Add rule based fraud flags
 # Use expr() to evaluate boolean logic conditions natively
 
-silver_df = (cleaned_df.withColumn(
-    "is_balance_fraud_signal", expr("newbalanceOrig == 0 AND amount > 10000")
-).withColumn("is_data_inconsistency", expr("isFlaggedFraud != isFraud"))
-.cache()
+silver_df = (
+    cleaned_df.withColumn(
+        "is_balance_fraud_signal", expr("newbalanceOrig == 0 AND amount > 10000")
+    )
+    .withColumn("is_data_inconsistency", expr("isFlaggedFraud != isFraud"))
+    .cache()
 )
 
 # --- Verification ---

@@ -49,9 +49,7 @@ def create_feature_store():
     print(f"Reading Silver dim_customer from: {silver_customer_path}")
     customer_df = spark.read.format("delta").load(silver_customer_path)
 
-    print(
-        "Joining fact_transactions with dim_customer (Standard Sort-Merge Join)..."
-    )
+    print("Joining fact_transactions with dim_customer (Standard Sort-Merge Join)...")
 
     # Removed unsafe broadcast on 3.5M row dimension table; using standard inner join
     feature_df = (
