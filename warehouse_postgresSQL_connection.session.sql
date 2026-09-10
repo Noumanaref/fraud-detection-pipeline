@@ -67,6 +67,6 @@ CREATE TABLE IF NOT EXISTS fact_fraud_inference (
     inference_timestamp TIMESTAMP
 );
 
-select * from fact_fraud_inference;
+select transaction_id from fact_fraud_inference;
 
 
