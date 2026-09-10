@@ -417,10 +417,10 @@ def run_batch_inference():
         conn = psycopg2.connect(**DB_CONFIG)
         high_risk_pdf = pd.read_sql(
             """
-            SELECT transaction_id, transaction_amount, xgboost_probability 
-            FROM fact_fraud_inference 
-            WHERE xgboost_probability > 0.9 
-            ORDER BY xgboost_probability DESC 
+            SELECT transaction_id, transaction_amount, xgboost_probability
+            FROM fact_fraud_inference
+            WHERE xgboost_probability > 0.9
+            ORDER BY xgboost_probability DESC
             LIMIT 10;
         """,
             conn,
