@@ -1,0 +1,4 @@
+[core]
+    remote = myremote
+['remote "myremote"']
+    url = s3://fraud-detection-lake-nouman-v2/dvc

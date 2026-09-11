@@ -1,0 +1,41 @@
+stages:
+  featurize:
+    cmd: >-
+      docker compose exec -i
+      -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+      -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+      spark-master
+      /opt/spark/bin/spark-submit
+      --packages "io.delta:delta-spark_2.12:3.1.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262"
+      --conf "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension"
+      --conf "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog"
+      --conf "spark.hadoop.fs.s3a.access.key=$AWS_ACCESS_KEY_ID"
+      --conf "spark.hadoop.fs.s3a.secret.key=$AWS_SECRET_ACCESS_KEY"
+      --conf "spark.hadoop.fs.s3a.endpoint=s3.amazonaws.com"
+      /workspace/ml/feature_engineering.py
+    deps:
+      - data/PS_20174392719_1491204439457_log.csv
+      - ml/feature_engineering.py
+    outs:
+      - data/features.parquet
+
+  train:
+    cmd: >-
+      docker compose exec -i
+      -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+      -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+      -e MLFLOW_TRACKING_URI=http://mlflow:5000
+      spark-master
+      /opt/spark/bin/spark-submit
+      --packages "io.delta:delta-spark_2.12:3.1.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262"
+      --conf "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension"
+      --conf "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog"
+      --conf "spark.hadoop.fs.s3a.access.key=$AWS_ACCESS_KEY_ID"
+      --conf "spark.hadoop.fs.s3a.secret.key=$AWS_SECRET_ACCESS_KEY"
+      --conf "spark.hadoop.fs.s3a.endpoint=s3.amazonaws.com"
+      /workspace/ml/model_train.py
+    deps:
+      - data/features.parquet
+      - ml/model_train.py
+    outs:
+      - models/xgboost_model.pkl

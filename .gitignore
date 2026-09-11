@@ -15,9 +15,12 @@ venv/
 .aws/
 
 # Data files - too large for git
-data/
-*.csv
-*.parquet
+data/*.csv
+data/*.parquet
+models/*.pkl
+models/*.json
+!models/*.dvc
+!data/*.dvc
 
 # Jupyter
 .ipynb_checkpoints/

@@ -4,6 +4,7 @@ import mlflow.xgboost
 import tempfile
 import xgboost as xgb
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import col as spark_col
 from delta import configure_spark_with_delta_pip
 from sklearn.metrics import roc_auc_score, precision_score
 
@@ -46,7 +47,11 @@ def train_fraud_model():
     print(f"Reading Gold features from: {gold_feature_path}")
     feature_df = spark.read.format("delta").load(gold_feature_path)
 
-    # 3. Optimize memory before converting to Pandas by selecting only required columns
+    # Fix 1: Sample ~15% (approx 500K rows out of 3.5M) to prevent driver OOM during Pandas conversion
+    feature_df = feature_df.sample(fraction=0.15, seed=42)
+    print(f"Sampled dataset size: {feature_df.count()} rows")
+
+    # 3. Optimize memory before converting to Pandas by selecting required columns and casting types
     print("Selecting model features and casting to optimal types...")
     feature_cols = [
         "transaction_amount",
@@ -56,9 +61,13 @@ def train_fraud_model():
     ]
     target_col = "isFraud"
 
-    # Drop unnecessary heavy string columns (like transaction_id, customer_id, merchant_id)
-    # before calling toPandas() to prevent driver OOM memory saturation.
-    optimized_df = feature_df.select(["timestamp"] + feature_cols + [target_col])
+    # Fix 2: Cast boolean/other types properly to integer before collection
+    optimized_df = feature_df.select(
+        ["timestamp"] + feature_cols + [target_col]
+    ).withColumn(
+        "is_balance_fraud_signal",
+        spark_col("is_balance_fraud_signal").cast("integer"),
+    )
 
     print("Converting optimized feature DataFrame to Pandas...")
     pdf = optimized_df.toPandas()
@@ -112,7 +121,21 @@ def train_fraud_model():
         mlflow.log_metric("auc", auc)
         mlflow.log_metric("precision", precision)
 
-        # Log model
+        # Ensure local models directory exists
+        os.makedirs("/workspace/models", exist_ok=True)
+        # Save a unique versioned copy using the run ID
+        versioned_model_path = f"/workspace/models/xgboost_model_{run.info.run_id}.pkl"
+
+
+        model.save_model(versioned_model_path)
+
+        # Also save a standard pointer copy for pipeline consistency
+        latest_model_path = "/workspace/models/xgboost_model.pkl"
+        model.save_model(latest_model_path)
+
+        print(f"Model saved locally at : {versioned_model_path} and {latest_model_path}")
+
+        # Log model artifact to MLflow
         with tempfile.TemporaryDirectory() as tmp_dir:
             model_path = os.path.join(tmp_dir, "model.json")
             model.save_model(model_path)
@@ -125,6 +148,8 @@ def train_fraud_model():
         model_uri=f"runs:/{run.info.run_id}/xgboost_fraud_model",
         name="fraud_detection_xgboost",
     )
+
+    print(f"Training_Completed_Successfully! Model registered in MLflow Model Registry & at {versioned_model_path}.")
 
     spark.stop()
 
