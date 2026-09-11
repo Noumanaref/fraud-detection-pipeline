@@ -126,14 +126,15 @@ def train_fraud_model():
         # Save a unique versioned copy using the run ID
         versioned_model_path = f"/workspace/models/xgboost_model_{run.info.run_id}.pkl"
 
-
         model.save_model(versioned_model_path)
 
         # Also save a standard pointer copy for pipeline consistency
         latest_model_path = "/workspace/models/xgboost_model.pkl"
         model.save_model(latest_model_path)
 
-        print(f"Model saved locally at : {versioned_model_path} and {latest_model_path}")
+        print(
+            f"Model saved locally at : {versioned_model_path} and {latest_model_path}"
+        )
 
         # Log model artifact to MLflow
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -149,7 +150,9 @@ def train_fraud_model():
         name="fraud_detection_xgboost",
     )
 
-    print(f"Training_Completed_Successfully! Model registered in MLflow Model Registry & at {versioned_model_path}.")
+    print(
+        f"Training_Completed_Successfully! Model registered in MLflow Model Registry & at {versioned_model_path}."
+    )
 
     spark.stop()
 

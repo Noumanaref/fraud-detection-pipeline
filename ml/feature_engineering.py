@@ -88,7 +88,7 @@ def create_feature_store():
     ).save(gold_output_path)
 
     print("Feature Engineering complete and saved to Gold layer!")
-    
+
     spark.stop()
 
 
