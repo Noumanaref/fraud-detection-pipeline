@@ -49,7 +49,7 @@ The project follows a modern **Medallion Lakehouse** architecture combined with 
 
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/](https://github.com/)[YOUR_GITHUB_USERNAME]/fraud-detection-pipeline.git
+   git clone [https://github.com/](https://github.com/)Noumanaref/fraud-detection-pipeline.git
    cd fraud-detection-pipeline
 
 
