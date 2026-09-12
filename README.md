@@ -1,6 +1,6 @@
 # Real-Time Fraud Detection Data Engineering Pipeline
 
-[![CI/CD Pipeline](https://github.com/[YOUR_GITHUB_USERNAME]/fraud-detection-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/[YOUR_GITHUB_USERNAME]/fraud-detection-pipeline/actions)
+[![CI/CD Pipeline](https://github.com/Noumanaref/fraud-detection-pipeline/actions/workflows/pipeline.yml/badge.svg)](https://github.com/Noumanaref/fraud-detection-pipeline/actions)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
 [![Apache Spark](https://img.shields.io/badge/Spark-3.5.0-orange.svg)](https://spark.apache.org/)
 [![Delta Lake](https://img.shields.io/badge/Delta_Lake-3.1.0-lightblue.svg)](https://delta.io/)
@@ -10,14 +10,14 @@ An end-to-end data engineering and MLOps system that processes **3.5 million+ fi
 
 ---
 
-## 🏗️ System Architecture
+##  System Architecture
 
 The project follows a modern **Medallion Lakehouse** architecture combined with a **Kappa streaming design**, ensuring raw data is safely stored while fast analytics run smoothly.
 
 
 ![Fraud Detection Architecture](docs/images/architecture_diagram.png)
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 * **Data Ingestion & Streaming:** Apache Kafka, Python Producers
 * **Distributed Processing & Storage:** Apache Spark (PySpark), Delta Lake, AWS S3
@@ -29,7 +29,7 @@ The project follows a modern **Medallion Lakehouse** architecture combined with 
 
 ---
 
-## ⚙️ Key Performance Optimizations
+##  Key Performance Optimizations
 
 * **Memory Management:** Expanded driver memory to 6GB and used all local CPU cores (`local[*]`) to process 3.5M+ rows without crashing.
 * **Smart Caching:** Cached Spark DataFrames in memory to avoid scanning AWS S3 storage multiple times during star-schema table creation.
@@ -38,7 +38,7 @@ The project follows a modern **Medallion Lakehouse** architecture combined with 
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 * Docker and Docker Compose installed
