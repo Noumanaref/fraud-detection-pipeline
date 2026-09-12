@@ -16,7 +16,6 @@ The project follows a modern **Medallion Lakehouse** architecture combined with 
 
 
 ![Fraud Detection MLOps Architecture](https://raw.githubusercontent.com/Noumanaref/fraud-detection-pipeline/main/docs/images/architecture_diagram.png)
-
 ---
 
 ## 🛠️ Tech Stack
