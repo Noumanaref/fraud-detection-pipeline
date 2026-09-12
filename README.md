@@ -15,9 +15,7 @@ An end-to-end data engineering and MLOps system that processes **3.5 million+ fi
 The project follows a modern **Medallion Lakehouse** architecture combined with a **Kappa streaming design**, ensuring raw data is safely stored while fast analytics run smoothly.
 
 
-<p align="center">
-  <img src="docs/images/architecture_diagram.png" width="100%" alt="Fraud Detection MLOps Architecture">
-</p>
+![Fraud Detection MLOps Architecture](docs/images/architecture_diagram.png)
 
 ---
 
