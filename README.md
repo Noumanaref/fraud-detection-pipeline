@@ -1,4 +1,4 @@
-# Real-Time Fraud Detection MLOps Pipeline
+# Real-Time Fraud Detection Data Engineering Pipeline
 
 [![CI/CD Pipeline](https://github.com/[YOUR_GITHUB_USERNAME]/fraud-detection-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/[YOUR_GITHUB_USERNAME]/fraud-detection-pipeline/actions)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
