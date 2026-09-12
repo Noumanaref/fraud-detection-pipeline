@@ -1,5 +1,5 @@
 ## 1. Executive Summary
-This project bridges the gap between raw data engineering and production machine learning (MLOps). By ingesting over **3.5 million transaction records**, the system cleans data through a structured lakehouse framework, tracks model versions using MLflow, versions data files using DVC, and pushes real-time alerts to operations teams[cite: 1, 2].
+This project bridges the gap between raw data engineering and production machine learning (MLOps). By ingesting over **3.5 million transaction records**, the system cleans data through a structured lakehouse framework, tracks model versions using MLflow, versions data files using DVC, and pushes real-time alerts to operations teams.
 
 ---
 
@@ -17,16 +17,16 @@ The project organizes data into three distinct layers on AWS S3 to separate raw 
 ## 3. Core Architectural Decisions
 
 ### ELT Over ETL
-* **Decision:** Extract, Load, and Transform (ELT) instead of traditional ETL[cite: 1].
-* **Why:** Cloud storage (AWS S3) is inexpensive. Keeping raw data in the Bronze layer means if a transformation bug occurs, developers can fix the code and replay data from the source without losing historical records[cite: 1].
+* **Decision:** Extract, Load, and Transform (ELT) instead of traditional ETL.
+* **Why:** Cloud storage (AWS S3) is inexpensive. Keeping raw data in the Bronze layer means if a transformation bug occurs, developers can fix the code and replay data from the source without losing historical records.
 
 ### Kappa Architecture
-* **Decision:** Use Apache Kafka as a single unified pipeline for both real-time data and historical batch files[cite: 1].
-* **Why:** Traditional systems separate real-time and batch into two codebases, which causes maintenance issues. Treating historical CSV files as a stream through Kafka unifies the processing logic[cite: 1].
+* **Decision:** Use Apache Kafka as a single unified pipeline for both real-time data and historical batch files.
+* **Why:** Traditional systems separate real-time and batch into two codebases, which causes maintenance issues. Treating historical CSV files as a stream through Kafka unifies the processing logic.
 
 ### Kimball Dimensional Modeling
-* **Decision:** Build a star schema using Ralph Kimball's bottom-up method[cite: 1].
-* **Why:** Organizes analytical data around business processes (Fraud Inference) with a clear grain (one row equals one scored transaction) and distinct dimension tables (`dim_user`, `dim_merchant`, `dim_time`, `dim_model`), making queries fast and simple[cite: 1].
+* **Decision:** Build a star schema using Ralph Kimball's bottom-up method.
+* **Why:** Organizes analytical data around business processes (Fraud Inference) with a clear grain (one row equals one scored transaction) and distinct dimension tables (`dim_user`, `dim_merchant`, `dim_time`, `dim_model`), making queries fast and simple.
 
 ---
 
