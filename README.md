@@ -6,7 +6,7 @@
 [![Delta Lake](https://img.shields.io/badge/Delta_Lake-3.1.0-lightblue.svg)](https://delta.io/)
 [![MLflow](https://img.shields.io/badge/MLflow-Registry-green.svg)](https://mlflow.org/)
 
-An end-to-end data engineering and MLOps system that processes **3.5 million+ financial transaction records**, trains machine learning models to detect fraud, and serves live predictions for business monitoring and alerting[cite: 1, 2].
+An end-to-end data engineering and MLOps system that processes **3.5 million+ financial transaction records**, trains machine learning models to detect fraud, and serves live predictions for business monitoring and alerting.
 
 ---
 
@@ -20,30 +20,30 @@ The project follows a modern **Medallion Lakehouse** architecture combined with 
 ## 🛠️ Tech Stack
 
 * **Data Ingestion & Streaming:** Apache Kafka, Python Producers
-* **Distributed Processing & Storage:** Apache Spark (PySpark), Delta Lake, AWS S3[cite: 1]
-* **Model Training & Tracking:** XGBoost, MLflow Model Registry[cite: 1]
-* **Dataset & Model Versioning:** DVC (Data Version Control)[cite: 1]
-* **Workflow Orchestration:** Apache Airflow[cite: 1]
-* **Serving & Visualization:** PostgreSQL, Grafana, Slack Webhook Alerts[cite: 1]
-* **CI/CD & Quality Assurance:** GitHub Actions, Flake8, Black[cite: 1]
+* **Distributed Processing & Storage:** Apache Spark (PySpark), Delta Lake, AWS S3
+* **Model Training & Tracking:** XGBoost, MLflow Model Registry
+* **Dataset & Model Versioning:** DVC (Data Version Control)
+* **Workflow Orchestration:** Apache Airflow
+* **Serving & Visualization:** PostgreSQL, Grafana, Slack Webhook Alerts
+* **CI/CD & Quality Assurance:** GitHub Actions, Flake8, Black
 
 ---
 
 ## ⚙️ Key Performance Optimizations
 
-* **Memory Management:** Expanded driver memory to 6GB and used all local CPU cores (`local[*]`) to process 3.5M+ rows without crashing[cite: 2].
-* **Smart Caching:** Cached Spark DataFrames in memory to avoid scanning AWS S3 storage multiple times during star-schema table creation[cite: 2].
-* **Partition Tuning:** Reduced default Spark shuffle partitions from 200 down to 8 to match hardware limits and prevent small-file clutter on S3[cite: 2].
-* **Pandas Protection:** Selected only required columns before converting Spark data to Pandas, stopping driver Out-Of-Memory (OOM) errors[cite: 2].
+* **Memory Management:** Expanded driver memory to 6GB and used all local CPU cores (`local[*]`) to process 3.5M+ rows without crashing.
+* **Smart Caching:** Cached Spark DataFrames in memory to avoid scanning AWS S3 storage multiple times during star-schema table creation.
+* **Partition Tuning:** Reduced default Spark shuffle partitions from 200 down to 8 to match hardware limits and prevent small-file clutter on S3.
+* **Pandas Protection:** Selected only required columns before converting Spark data to Pandas, stopping driver Out-Of-Memory (OOM) errors.
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-* Docker and Docker Compose installed[cite: 1]
-* Python 3.8 or higher installed[cite: 1]
-* AWS Account with an S3 bucket configured[cite: 1]
+* Docker and Docker Compose installed
+* Python 3.8 or higher installed
+* AWS Account with an S3 bucket configured
 
 ### Installation Guide
 
