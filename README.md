@@ -14,4 +14,68 @@ An end-to-end data engineering and MLOps system that processes **3.5 million+ fi
 
 The project follows a modern **Medallion Lakehouse** architecture combined with a **Kappa streaming design**, ensuring raw data is safely stored while fast analytics run smoothly.
 
+
+<p align="center">
+  <img src="docs/images/architecture_diagram.png" width="100%" alt="Fraud Detection MLOps Architecture">
+</p>
+
+---
+
+## 🛠️ Tech Stack
+
+* **Data Ingestion & Streaming:** Apache Kafka, Python Producers
+* **Distributed Processing & Storage:** Apache Spark (PySpark), Delta Lake, AWS S3[cite: 1]
+* **Model Training & Tracking:** XGBoost, MLflow Model Registry[cite: 1]
+* **Dataset & Model Versioning:** DVC (Data Version Control)[cite: 1]
+* **Workflow Orchestration:** Apache Airflow[cite: 1]
+* **Serving & Visualization:** PostgreSQL, Grafana, Slack Webhook Alerts[cite: 1]
+* **CI/CD & Quality Assurance:** GitHub Actions, Flake8, Black[cite: 1]
+
+---
+
+## ⚙️ Key Performance Optimizations
+
+* **Memory Management:** Expanded driver memory to 6GB and used all local CPU cores (`local[*]`) to process 3.5M+ rows without crashing[cite: 2].
+* **Smart Caching:** Cached Spark DataFrames in memory to avoid scanning AWS S3 storage multiple times during star-schema table creation[cite: 2].
+* **Partition Tuning:** Reduced default Spark shuffle partitions from 200 down to 8 to match hardware limits and prevent small-file clutter on S3[cite: 2].
+* **Pandas Protection:** Selected only required columns before converting Spark data to Pandas, stopping driver Out-Of-Memory (OOM) errors[cite: 2].
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+* Docker and Docker Compose installed[cite: 1]
+* Python 3.8 or higher installed[cite: 1]
+* AWS Account with an S3 bucket configured[cite: 1]
+
+### Installation Guide
+
+1. **Clone the repository:**
+   ```bash
+   git clone [https://github.com/](https://github.com/)[YOUR_GITHUB_USERNAME]/fraud-detection-pipeline.git
+   cd fraud-detection-pipeline
+
+
+2. **Set up environment variables:**
+   ```bash
+   AWS_ACCESS_KEY_ID=[YOUR_AWS_ACCESS_KEY]
+   AWS_SECRET_ACCESS_KEY=[YOUR_AWS_SECRET_KEY]
+   MLFLOW_TRACKING_URI=http://localhost:5000
+
+ 
+3. **Run the infrastructure using Docker Compose:**
+     ```bash 
+    docker-compose up -d
+
+
+4. **Execute the data processing and training pipeline:**
+   ```bash
+    dvc repro
+
+
+5. **Monitoring and Alerts:**
+   The system connects processed predictions to PostgreSQL, feeding live dashboards in Grafana. If unusual transaction spikes occur, automated webhooks trigger instant alerts straight to Slack.
+
+
 Read the full [Comprehensive Technical Documentation](docs/technical_documentation.md) for a deep dive into the architecture and optimizations.
